@@ -57,21 +57,47 @@ def order_link(it=None):
 
 # ---------- photos ----------
 _session = None
-def cutout(src: Path) -> Image.Image:
-    global _session
-    cached = CACHE / (src.stem + ".png")
-    if cached.exists():
-        c = Image.open(cached); c.info["photo"] = c.text.get("photo") == "1"; return c
-    from rembg import remove, new_session
-    _session = _session or new_session("isnet-general-use")
+def inner_photo(src):
+    """Tool photos sit on a flat studio colour with SKU/handle text in the bottom corners: crop to the photo itself."""
     im = Image.open(src).convert("RGB")
     a = np.asarray(im).astype(int); h, w, _ = a.shape
-    # Tool photos sit on a flat studio colour with SKU/handle text in the bottom corners: crop to the photo itself.
     diff = np.abs(a - a[5, w // 2]).sum(2) > 40
     diff[int(h * .93):, :int(w * .3)] = False; diff[int(h * .93):, int(w * .7):] = False
     ys, xs = np.where(diff)
     if len(xs) and (xs.max() - xs.min()) * (ys.max() - ys.min()) < .97 * w * h:
         im = im.crop((xs.min() + 4, ys.min() + 4, xs.max() - 4, ys.max() - 4))
+    return im
+
+
+def photo_issues(src, cut, n):
+    """Plain-language problems with one photo, for the reshoot list in the tool. Cached next to the cut-out."""
+    f = CACHE / (Path(src).stem + ".json")
+    if f.exists(): out = json.loads(f.read_text())
+    elif not Path(src).exists(): return []
+    else: out = _issues(src); f.write_text(json.dumps(out))
+    if n == 1 and cut.info.get("photo"): out = out + ["item poora frame mein nahi ya background bhara hua; saada deewar ya chadar ke samne lein"]
+    return [f"Photo {n}: {x}" for x in out]
+
+
+def _issues(src):
+    im = inner_photo(src); g = np.asarray(im.convert("L"), dtype=float)
+    lap = (g[1:-1, 1:-1] * 4 - g[:-2, 1:-1] - g[2:, 1:-1] - g[1:-1, :-2] - g[1:-1, 2:]).var()
+    out = []
+    if lap < 60: out.append("blur hai (hila hua ya focus nahi)")
+    if g.mean() < 70: out.append("andheri hai, roshni mein lein")
+    elif g.mean() > 215: out.append("bohat zyada roshni, rang ud gaye")
+    if min(im.size) < 350: out.append("bohat chhoti / zoom ki hui")
+    return out
+
+
+def cutout(src: Path) -> Image.Image:
+    global _session
+    cached = CACHE / (Path(src).stem + ".png")
+    if cached.exists():
+        c = Image.open(cached); c.info["photo"] = c.text.get("photo") == "1"; return c
+    from rembg import remove, new_session
+    _session = _session or new_session("isnet-general-use")
+    im = inner_photo(src)
     cut = remove(im, session=_session, post_process_mask=True)
     al = np.asarray(cut.getchannel("A")); ys, xs = np.where(al > 30)
     if len(xs): cut = cut.crop((xs.min(), ys.min(), xs.max() + 1, ys.max() + 1))
@@ -291,22 +317,26 @@ document.querySelector('#g button').setAttribute('aria-pressed','true');[q,cat,s
 def main(items_dir, assets_dir):
     items = load_items(items_dir)
     tmp = ROOT / "public.new"; shutil.rmtree(tmp, ignore_errors=True); (tmp / "img").mkdir(parents=True); (tmp / "p").mkdir()
-    counts = {}
+    counts, report = {}, {}
     for it in items:
-        n = 0
+        n = 0; issues = []
         for aid in it["images"]:
             src = Path(assets_dir) / f"{aid}.jpg"
-            if not src.exists(): continue
+            if not src.exists() and not (CACHE / f"{aid}.png").exists(): continue
             try: cut = cutout(src)
             except Exception as e: print("cutout failed", aid, e); continue
             n += 1; studio(cut, backdrop(cut)).save(tmp / "img" / f"{it['sku']}-{n}.jpg", quality=86, optimize=True, progressive=True)
+            issues += photo_issues(src, cut, n)
+        if n < 3: issues.append(f"Sirf {n} photo. Kam az kam 4 lein: front, back, brand/size tag, aur close-up (fabric ya logo)")
         counts[it["sku"]] = n
+        if issues and it["status"] != "Sold": report[it["sku"]] = issues
         if not n: it["images"] = []
     for it in items: (tmp / "p" / f"{it['sku']}.html").write_text(product_page(it, items, counts[it["sku"]]))
     (tmp / "index.html").write_text(index_page(items))
+    (tmp / "photo-report.json").write_text(json.dumps(report, ensure_ascii=False, indent=1))
     (tmp / "items.json").write_text(json.dumps([{"sku": i["sku"], "title": i["title"], "price": i["price"], "status": i["status"]} for i in items]))
     shutil.copy(Path(__file__).parent / "favicon.svg", tmp / "favicon.svg")
-    (tmp / "404.html").write_text(page(f"Not found | {CFG['storeName']}", CFG["tagline"], '<section class="nf"><h1>Ye item ab available nahi</h1><p>Hamare baqi items dekhein.</p><a class="btn" href="/">Store dekhein</a></section>'))
+    (tmp / "404.html").write_text(page(f"Not found | {CFG['storeName']}", CFG["tagline"], '<section class="nf"><h1>Ye item ab available nahi</h1><p>Hamare baqi items dekhein.</p><a class="btn" href="' + esc(CFG['siteUrl']) + '/">Store dekhein</a></section>'))
     base = CFG["siteUrl"].rstrip("/")
     (tmp / "sitemap.xml").write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + f"<url><loc>{base}/</loc></url>" + "".join(f"<url><loc>{base}/p/{i['sku']}.html</loc></url>" for i in items) + "</urlset>")
     (tmp / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: {base}/sitemap.xml\n")
