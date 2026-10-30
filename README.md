@@ -1,4 +1,4 @@
-# Sahiwal Thrift Co. store
+# Thrifty.pk store
 
 Live: https://qari1990.github.io/Sahiwalthrift/
 

@@ -1,8 +1,11 @@
 {
-  "storeName": "Sahiwal Thrift Co.",
+  "storeName": "Thrifty.pk",
   "tagline": "Hand-picked pre-loved international brands at prices that make sense. Cash on delivery all over Pakistan.",
-  "handle": "@sahiwalthrift",
+  "handle": "@thrifty.pk",
   "whatsapp": "0311 4139007",
-  "houseLabel": "ST Select",
-  "siteUrl": "https://qari1990.github.io/Sahiwalthrift"
+  "houseLabel": "Thrifty Select",
+  "siteUrl": "https://qari1990.github.io/Sahiwalthrift",
+  "deal": {"extraPct": 10},
+  "bundle": [{"min": 2, "off": 200}, {"min": 3, "pct": 10}],
+  "voucher": {"code": "THRIFTY200", "amount": 200, "minOrder": 2000}
 }
