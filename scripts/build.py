@@ -183,6 +183,23 @@ def card(it, up=""):
 <div class="cb"><span class="cbrand">{esc(it['brand'])}</span><span class="ct">{esc(it['title'])}</span><span class="cp"><b>{rs(it['price'])}</b>{f'<s>{rs(it["retailPkr"])}</s>' if it['retailPkr'] else ''}</span></div></a>"""
 
 
+def offer_box(it):
+    mn = -(-int(it["price"] * .6) // 50) * 50
+    if not CFG.get("offersUrl"):
+        msg = urllib.parse.quote(f"Assalam o alaikum! {it['title']} ({it['sku']}) ke liye meri offer: Rs ")
+        return f'<a class="offer-btn" href="https://wa.me/{wa_digits()}?text={msg}" target="_blank" rel="noopener">Make an offer</a>'
+    return f"""<section class="offer" id="offer" data-sku="{esc(it['sku'])}" data-price="{it['price']}" data-min="{mn}">
+<div class="o-hd"><div><b>Make an offer</b><span class="o-sub" id="o-sub">Apni price batayein. {"Pehli offer ke 48 ghante baad sab se oonchi offer ko item milta hai, agar koi poori price par na le le."}</span></div><span class="o-timer" id="o-timer" hidden></span></div>
+<div class="o-stats"><div><span>Highest offer</span><b id="o-top">-</b></div><div><span>Offers</span><b id="o-count">0</b></div><div><span>Min offer</span><b id="o-min">{rs(mn)}</b></div></div>
+<form id="o-form" class="o-form"><label>Aap ki offer (Rs)<input name="amount" type="number" inputmode="numeric" min="{mn}" max="{it['price'] - 1}" required placeholder="{mn}"></label>
+<label>Naam<input name="name" required maxlength="40" autocomplete="name"></label>
+<label>WhatsApp number<input name="phone" type="tel" inputmode="tel" required placeholder="03xx xxxxxxx" autocomplete="tel"></label>
+<button type="submit">Send offer</button></form>
+<p class="o-msg" id="o-msg" role="status"></p>
+<div class="o-mine" id="o-mine" hidden></div>
+<button type="button" class="o-link" id="o-check">Meri offer ka status dekhein</button></section>"""
+
+
 def product_page(it, all_items, n_imgs):
     sku = it["sku"]; sold = it["status"] == "Sold"
     imgs = [f"../img/{sku}-{i}.jpg" for i in range(1, n_imgs + 1)]
@@ -200,7 +217,7 @@ def product_page(it, all_items, n_imgs):
 <div class="pp"><b>{rs(it['price'])}</b>{f'<s>{rs(it["retailPkr"])}</s><span class="b-off">-{off(it)}%</span>' if it['retailPkr'] else ''}</div>
 {f'<p class="save">Retail abroad ~${it["retailUsd"]}. You save {rs(save)}.</p>' if save > 0 else ''}
 <div class="tags"><span class="tag ok">{esc(it['cond'])}</span>{f'<span class="tag">Size {esc(it["size"])}</span>' if it['size'] else ''}{f'<span class="tag">{esc(it["gender"])}</span>' if it['gender'] else ''}<span class="tag">{'Sold' if sold else 'Only 1 piece'}</span></div>
-{'<p class="soldmsg">Ye item bik chuka hai. Neeche milte julte items dekhein ya WhatsApp par poochein.</p>' if sold else f'<a class="buy" href="{esc(wa)}" target="_blank" rel="noopener">{ICON}Buy on WhatsApp</a>'}
+{'<p class="soldmsg">Ye item bik chuka hai. Neeche milte julte items dekhein ya WhatsApp par poochein.</p>' if sold else f'<a class="buy" href="{esc(wa)}" target="_blank" rel="noopener">{ICON}Buy now on WhatsApp</a>' + offer_box(it)}
 <div class="perks"><div><b>COD</b><span>Cash on delivery all over Pakistan</span></div><div><b>Checked</b><span>Washed, pressed and hand-checked</span></div><div><b>1 piece</b><span>Every item is one of a kind</span></div></div>
 <details open><summary>Description</summary><p>{esc(it['desc'])}</p>{f'<p class="muted">{esc(it["fix"])}</p>' if it['fix'] else ''}</details>
 {f'<details open><summary>Size &amp; fit</summary><p>Size {esc(it["size"])}{". Measurements: " + esc(meas) if meas else ""}. Size ka sawal ho to WhatsApp par poochein, hum naap kar bata denge.</p></details>' if it['size'] else ''}
@@ -209,10 +226,42 @@ def product_page(it, all_items, n_imgs):
 <button class="share" type="button" data-share>Share this item</button></div></section>
 {f'<section class="rel"><h2>You may also like</h2><div class="grid">{"".join(card(o, "../") for o in related)}</div></section>' if related else ''}
 {'' if sold else f'<div class="sticky"><div><b>{rs(it["price"])}</b><span>{esc(it["size"] and "Size " + it["size"])}</span></div><a href="{esc(wa)}" target="_blank" rel="noopener">{ICON}Buy on WhatsApp</a></div>'}"""
-    js = """<script>(function(){var g=document.getElementById('gal'),t=document.querySelectorAll('.gal-th button');t.forEach(function(b){b.onclick=function(){g.scrollTo({left:g.clientWidth*+b.dataset.i,behavior:'smooth'})}});
+    js = offer_js() + """<script>(function(){var g=document.getElementById('gal'),t=document.querySelectorAll('.gal-th button');t.forEach(function(b){b.onclick=function(){g.scrollTo({left:g.clientWidth*+b.dataset.i,behavior:'smooth'})}});
 g&&g.addEventListener('scroll',function(){var i=Math.round(g.scrollLeft/g.clientWidth);t.forEach(function(b){b.setAttribute('aria-current',+b.dataset.i===i)})},{passive:true});
 var s=document.querySelector('[data-share]');s&&(s.onclick=function(){var d={title:document.title,url:location.href};if(navigator.share)navigator.share(d).catch(function(){});else navigator.clipboard.writeText(location.href).then(function(){s.textContent='Link copied'})})})()</script>"""
     return page(f"{it['title']} | {CFG['storeName']}", it["desc"] or it["title"], body, 1, f"img/{sku}-1.jpg" if n_imgs else None, f"p/{sku}.html", None if sold else wa, js)
+
+
+def offer_js():
+    url = CFG.get("offersUrl")
+    if not url: return ""
+    return """<script>(function(){var U=%s,box=document.getElementById('offer');if(!box)return;var sku=box.dataset.sku,$=function(i){return document.getElementById(i)},st=null,tick=null;
+function rs(n){return 'Rs '+Math.round(n).toLocaleString('en-PK')}
+function get(q){return fetch(U+'?'+new URLSearchParams(q)).then(function(r){return r.json()})}
+function post(b){return fetch(U,{method:'POST',body:JSON.stringify(b)}).then(function(r){return r.json()})}
+function show(s){if(!s||s.error)return;st=s;$('o-top').textContent=s.highest?rs(s.highest):'Abhi koi nahi';$('o-count').textContent=s.count;var mn=s.highest?Math.max(s.minOffer,s.highest+s.step):s.minOffer;$('o-min').textContent=rs(mn);box.querySelector('[name=amount]').min=mn;box.querySelector('[name=amount]').placeholder=mn;
+ if(s.state!=='open'){$('o-form').hidden=true;$('o-sub').textContent=s.state==='won'?'Is item par deal final ho chuki hai.':s.state==='sold'?'Ye item bik chuka hai.':'Is item par offers band hain.'}
+ clearInterval(tick);if(s.endsAt&&s.state==='open'){var t=$('o-timer');t.hidden=false;var f=function(){var d=s.endsAt-Date.now();if(d<=0){t.textContent='Closing...';return}var h=Math.floor(d/36e5),m=Math.floor(d%%36e5/6e4);t.textContent=h+'h '+m+'m left'};f();tick=setInterval(f,3e4)}}
+function msg(t,ok){var m=$('o-msg');m.textContent=t;m.className='o-msg '+(ok?'ok':'err')}
+function wa(t){return 'https://wa.me/%s?text='+encodeURIComponent(t)}
+function mine(phone){get({a:'mine',sku:sku,phone:phone}).then(function(r){var el=$('o-mine');el.hidden=false;if(r.error){el.textContent=r.error;return}if(r.none){el.textContent='Is number se koi offer nahi mili.';return}
+ var h='<p>Aap ki offer: <b>'+rs(r.amount)+'</b> · '+({'new':'Pending','countered':'Counter offer aayi hai','won':'Deal final!','lost':'Ye offer nahi jeeti'}[r.status]||r.status)+'</p>';
+ if(r.status==='countered')h+='<p>Hamari counter offer: <b>'+rs(r.counter)+'</b></p><button type="button" id="o-acc">Accept '+rs(r.counter)+'</button>';
+ if(r.status==='won')h+='<a class="buy" target="_blank" rel="noopener" href="'+wa('Assalam o alaikum! '+sku+' par meri deal '+rs(r.amount)+' final hui hai. Mera address ye hai: ')+'">Address bhejein (WhatsApp)</a>';
+ el.innerHTML=h;var a=$('o-acc');a&&(a.onclick=function(){a.disabled=true;post({a:'accept',sku:sku,phone:phone}).then(function(x){if(x.error){msg(x.error)}else{msg('Deal final! WhatsApp par address bhejein.',1)}mine(phone);refresh()})})})}
+function refresh(){get({a:'state',sku:sku}).then(show).catch(function(){})}
+var saved='';try{saved=localStorage.getItem('st-phone')||'';var nm=localStorage.getItem('st-name')||'';box.querySelector('[name=phone]').value=saved;box.querySelector('[name=name]').value=nm}catch(e){}
+$('o-form').onsubmit=function(e){e.preventDefault();var f=new FormData(e.target),b={a:'offer',sku:sku,name:f.get('name'),phone:f.get('phone'),amount:f.get('amount')},btn=e.target.querySelector('button');btn.disabled=true;msg('Bhej raha hoon...',1);
+ try{localStorage.setItem('st-phone',b.phone);localStorage.setItem('st-name',b.name)}catch(x){}
+ post(b).then(function(r){btn.disabled=false;if(r.error){msg(r.error);return}msg(r.message,1);show(r);mine(b.phone)}).catch(function(){btn.disabled=false;msg('Network masla, dobara try karein')})};
+$('o-check').onclick=function(){var p=box.querySelector('[name=phone]').value||prompt('Apna WhatsApp number');if(p)mine(p)};
+refresh();if(saved)mine(saved)})()</script>""" % (json.dumps(url), wa_digits())
+
+
+def index_badges_js():
+    url = CFG.get("offersUrl")
+    if not url: return ""
+    return """<script>fetch(%s+'?a=all').then(function(r){return r.json()}).then(function(m){document.querySelectorAll('.card').forEach(function(c){var s=m[c.getAttribute('href').replace(/^.*[/]|[.]html$/g,'')];if(!s||!s.highest||c.classList.contains('is-sold'))return;var b=document.createElement('span');b.className='b-offer';b.textContent=s.state==='won'?'Deal done':'Offer Rs '+Math.round(s.highest).toLocaleString('en-PK')+' · '+s.count;c.querySelector('.ci').appendChild(b)})}).catch(function(){})</script>""" % json.dumps(url)
 
 
 def index_page(items):
@@ -236,7 +285,7 @@ var s=sort.value;cards.slice().sort(function(a,b){return s==='low'?a.dataset.pri
 document.getElementById('count').textContent=n+' items';document.getElementById('empty').hidden=n>0}
 document.querySelectorAll('#g button').forEach(function(b){b.onclick=function(){g=b.dataset.v;document.querySelectorAll('#g button').forEach(function(x){x.setAttribute('aria-pressed',x===b)});run()}});
 document.querySelector('#g button').setAttribute('aria-pressed','true');[q,cat,size,sort,sold].forEach(function(e){e.addEventListener('input',run)});run()})()</script>"""
-    return page(f"{CFG['storeName']} | International brands at affordable prices", CFG["tagline"], body, 0, f"img/{live[0]['sku']}-1.jpg" if live and live[0]["images"] else None, "index.html", None, js)
+    return page(f"{CFG['storeName']} | International brands at affordable prices", CFG["tagline"], body, 0, f"img/{live[0]['sku']}-1.jpg" if live and live[0]["images"] else None, "index.html", None, js + index_badges_js())
 
 
 def main(items_dir, assets_dir):
@@ -255,6 +304,7 @@ def main(items_dir, assets_dir):
         if not n: it["images"] = []
     for it in items: (tmp / "p" / f"{it['sku']}.html").write_text(product_page(it, items, counts[it["sku"]]))
     (tmp / "index.html").write_text(index_page(items))
+    (tmp / "items.json").write_text(json.dumps([{"sku": i["sku"], "title": i["title"], "price": i["price"], "status": i["status"]} for i in items]))
     shutil.copy(Path(__file__).parent / "favicon.svg", tmp / "favicon.svg")
     (tmp / "404.html").write_text(page(f"Not found | {CFG['storeName']}", CFG["tagline"], '<section class="nf"><h1>Ye item ab available nahi</h1><p>Hamare baqi items dekhein.</p><a class="btn" href="/">Store dekhein</a></section>'))
     base = CFG["siteUrl"].rstrip("/")
