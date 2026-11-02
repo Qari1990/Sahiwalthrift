@@ -19,13 +19,13 @@
     "days": "3-5 working days all over Pakistan, 1-2 days in Sahiwal"
   },
   "returns": {
-    "days": 3
+    "days": 7
   },
   "announcements": [
     "Cash on delivery all over Pakistan",
     "Free delivery on orders over Rs 3,500",
     "New winter drop: jackets, hoodies and sweaters",
-    "Every piece washed, pressed and hand-checked"
+    "7-day easy returns on every order"
   ],
   "deal": {
     "extraPct": 10
@@ -45,5 +45,6 @@
     "amount": 200,
     "minOrder": 2000
   },
-  "logoAccent": "Thrift"
+  "logoAccent": "Thrift",
+  "apiUrl": "https://script.google.com/macros/s/AKfycbyyLq3EnqUGEJmzEtxzQLgrBWit09chNZiIVlSMOZbJY-TfCdFpwiISP1NfvynMVIkC/exec"
 }

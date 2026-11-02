@@ -32,20 +32,32 @@ function draw(){counts();
  $('bag-sum').innerHTML=bag.length?sumHtml(t):'';$('co-sum').innerHTML=bag.length?sumHtml(t):'';$('bag-go').hidden=!bag.length;
  if(!bag.length&&step==='co')show('cart')}
 function show(s){step=s;$('bag-cart').hidden=s!=='cart';$('co').hidden=s!=='co';$('co-done').hidden=s!=='done';$('bag-title').textContent=s==='co'?'Checkout':s==='done'?'Order sent':'Your bag';
- if(s==='co'){var c=L.get('cust',{}),f=$('co');['name','phone','city','address'].forEach(function(k){if(c[k]&&!f[k].value)f[k].value=c[k]})}}
+ if(s==='co'){var c=L.get('cust',{}),f=$('co');['name','phone','city','address','email'].forEach(function(k){if(c[k]&&!f[k].value)f[k].value=c[k]})}}
 function open_(s){var b=$('bag');b.hidden=false;document.body.classList.add('noscroll');show(s||'cart');draw()}
 function close_(id){$(id).hidden=true;document.body.classList.remove('noscroll')}
 function add(it){if(!bag.some(function(x){return x.sku===it.sku})){bag.push(it);L.set('bag',bag)}}
-function orderNo(){var d=pkt(),p=function(n){return (n<10?'0':'')+n};return 'TP-'+String(d.getUTCFullYear()).slice(2)+p(d.getUTCMonth()+1)+p(d.getUTCDate())+'-'+Math.random().toString(36).slice(2,6).toUpperCase()}
-$('co')&&($('co').onsubmit=function(e){e.preventDefault();var f=e.target,err=$('co-err'),c={};['name','phone','city','address','note'].forEach(function(k){c[k]=f[k].value.trim()});
+function orderNo(){var d=pkt(),p=function(n){return (n<10?'0':'')+n};return 'AT-'+String(d.getUTCFullYear()).slice(2)+p(d.getUTCMonth()+1)+p(d.getUTCDate())+'-'+Math.random().toString(36).slice(2,6).toUpperCase()}
+function api(body){return fetch(T.api,{method:'POST',body:JSON.stringify(body)}).then(function(r){return r.json()})}
+$('co')&&($('co').onsubmit=function(e){e.preventDefault();var f=e.target,err=$('co-err'),c={},via=(e.submitter&&e.submitter.dataset.via)||'site';['name','phone','city','address','note','email'].forEach(function(k){c[k]=f[k].value.trim()});
  var ph=c.phone.replace(/\D/g,'');if(!c.name||!c.city||c.address.length<8){err.textContent='Naam, city aur poora address likhein.';return}
- if(!/^(92|0)?3\d{9}$/.test(ph)){err.textContent='Sahi mobile number likhein (03xx xxxxxxx).';return}err.textContent='';
- var t=totals(),no=orderNo(),msg='Assalam o alaikum! Naya order *'+no+'* ('+T.store+')\n\n'+bag.map(function(it,i){return (i+1)+'. '+it.b+' '+it.n+(it.s?' (size '+it.s+')':'')+' ['+it.sku+'] '+rs(price(it))}).join('\n')+
- '\n\nSubtotal '+rs(t.sub)+(t.bd?'\n'+t.lbl+' -'+rs(t.bd):'')+(t.vd?'\nVoucher '+V.code+' -'+rs(t.vd):'')+'\nDelivery '+(t.del?rs(t.del):'Free')+'\n*Total '+rs(t.total)+' (Cash on delivery)*\n\nNaam: '+c.name+'\nPhone: '+c.phone+'\nCity: '+c.city+'\nAddress: '+c.address+(c.note?'\nNote: '+c.note:'');
- var url='https://wa.me/'+T.wa+'?text='+encodeURIComponent(msg),w=window.open(url,'_blank');
- var o=L.get('orders',[]);o.unshift({no:no,date:today,items:bag.length,total:t.total,phone:c.phone});L.set('orders',o.slice(0,10));L.set('cust',{name:c.name,phone:c.phone,city:c.city,address:c.address});
- $('co-done').innerHTML='<p class="eyebrow">Shukriya!</p><h3>Order '+esc(no)+'</h3><p>Aap ka order WhatsApp par khul gaya hai. Wahan <b>Send</b> zaroor dabayein. Hum confirm kar ke parcel bhej denge.</p><a class="buy" href="'+esc(url)+'" target="_blank" rel="noopener">WhatsApp dobara kholein</a><p class="bag-note">Total '+rs(t.total)+', payment parcel milne par. Order number sambhal kar rakhein, <a href="'+root+'track.html">Track order</a>.</p>';
- if(!w)location.href=url;bag=[];L.set('bag',bag);if(vc&&t.vd){vc=null;L.set('voucher',null);L.set('pop',1)}show('done');draw()});
+ if(!/^(92|0)?3\d{9}$/.test(ph)){err.textContent='Sahi mobile number likhein (03xx xxxxxxx).';return}
+ if(c.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email)){err.textContent='Email sahi likhein ya khali chhor dein.';return}
+ if(!f.agree.checked){err.textContent='Terms aur return policy se ittefaq zaroori hai.';return}err.textContent='';
+ var t=totals(),items=bag.map(function(it){return {sku:it.sku,b:it.b,n:it.n,s:it.s,price:price(it)}});
+ function waMsg(no){return 'Assalam o alaikum! '+(via==='site'?'Website order':'Naya order')+' *'+no+'* ('+T.store+')\n\n'+bag.map(function(it,i){return (i+1)+'. '+it.b+' '+it.n+(it.s?' (size '+it.s+')':'')+' ['+it.sku+'] '+rs(price(it))}).join('\n')+
+ '\n\nSubtotal '+rs(t.sub)+(t.bd?'\n'+t.lbl+' -'+rs(t.bd):'')+(t.vd?'\nVoucher '+V.code+' -'+rs(t.vd):'')+'\nDelivery '+(t.del?rs(t.del):'Free')+'\n*Total '+rs(t.total)+' (Cash on delivery)*\n\nNaam: '+c.name+'\nPhone: '+c.phone+'\nCity: '+c.city+'\nAddress: '+c.address+(c.note?'\nNote: '+c.note:'')}
+ function done(no,url,onSite){var o=L.get('orders',[]);o.unshift({no:no,date:today,items:bag.length,total:t.total,phone:c.phone});L.set('orders',o.slice(0,10));L.set('cust',{name:c.name,phone:c.phone,city:c.city,address:c.address,email:c.email});
+  $('co-done').innerHTML='<p class="eyebrow">Shukriya, '+esc(c.name)+'!</p><h3>Order '+esc(no)+'</h3>'+(onSite?'<p>Aap ka order hamein mil gaya hai. Hum jald WhatsApp ya call par confirm karenge'+(c.email?' aur '+esc(c.email)+' par email bhi aayegi':'')+'.</p><a class="ask" href="'+esc(url)+'" target="_blank" rel="noopener">WhatsApp par bhi bhejein (jaldi confirmation)</a>':'<p>Aap ka order WhatsApp par khul gaya hai. Wahan <b>Send</b> zaroor dabayein.</p><a class="buy" href="'+esc(url)+'" target="_blank" rel="noopener">WhatsApp dobara kholein</a>')+
+  '<p class="bag-note">Total '+rs(t.total)+', payment parcel milne par. <a href="'+root+'track.html?o='+encodeURIComponent(no)+'">Track order</a></p>';
+  bag=[];L.set('bag',bag);if(vc&&t.vd){vc=null;L.set('voucher',null);L.set('pop',1)}show('done');draw()}
+ function viaWa(){var no=orderNo(),url='https://wa.me/'+T.wa+'?text='+encodeURIComponent(waMsg(no));if(!window.open(url,'_blank'))location.href=url;done(no,url,false)}
+ if(via==='wa'||!T.api)return viaWa();
+ var btn=e.submitter;btn.disabled=true;btn.textContent='Order lag raha hai...';
+ api({a:'order',name:c.name,phone:c.phone,email:c.email,city:c.city,address:c.address,note:c.note,items:items,subtotal:t.sub,discount:t.bd+t.vd,delivery:t.del,total:t.total}).then(function(r){btn.disabled=false;btn.textContent='Place order · Cash on delivery';
+  if(r.error){err.textContent=r.error;if(r.gone){bag=bag.filter(function(x){return r.gone.indexOf(x.sku)<0});L.set('bag',bag);draw()}return}
+  done(r.no,'https://wa.me/'+T.wa+'?text='+encodeURIComponent(waMsg(r.no)),true)}).catch(function(){btn.disabled=false;btn.textContent='Place order · Cash on delivery';err.textContent='Network masla. Dobara try karein ya "Order on WhatsApp" dabayein.'})});
+var nf=$('news');nf&&(nf.onsubmit=function(e){e.preventDefault();var m=$('news-msg'),em=nf.email.value.trim();if(!T.api){location.href='https://wa.me/'+T.wa+'?text='+encodeURIComponent('Mujhe naye drops ki khabar dein. Email: '+em);return}
+ m.className='o-msg ok';m.textContent='...';api({a:'subscribe',email:em}).then(function(r){m.className='o-msg '+(r.error?'err':'ok');m.textContent=r.error||r.message;if(!r.error)nf.reset()}).catch(function(){m.textContent='Network masla, dobara try karein'})});
 document.addEventListener('click',function(e){var a=e.target.closest('[data-add]');if(a){e.preventDefault();var it=JSON.parse(a.dataset.add),had=bag.some(function(x){return x.sku===it.sku});add(it);draw();if(!had&&a.classList.contains('cadd'))toast('Bag mein add ho gaya · '+nextTip());else open_();return}
  var bu=e.target.closest('[data-buy]');if(bu){add(JSON.parse(bu.dataset.buy));open_('co');return}
  var wi=e.target.closest('[data-wish]');if(wi){e.preventDefault();var w=JSON.parse(wi.dataset.wish),j=wish.findIndex(function(x){return x.sku===w.sku});if(j<0){wish.unshift(w);toast('Wishlist mein save ho gaya')}else{wish.splice(j,1);if(wi.closest('#wl'))wi.closest('.card').remove()}L.set('wish',wish);draw();return}
