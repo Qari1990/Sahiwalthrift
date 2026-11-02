@@ -219,7 +219,7 @@ NAV = {}  # gender -> [categories with stock], filled in main()
 GENDERS = ("Men", "Women", "Kids")
 CONDS = ("Like new", "Great condition", "Good pre-loved condition", "Pre-loved, priced to sell")
 INFO = [("how-to-order", "How to order"), ("shipping", "Delivery & COD"), ("returns", "Returns & exchange"), ("condition-guide", "Condition guide"),
-        ("size-guide", "Size guide"), ("faq", "FAQs"), ("track", "Track your order"), ("about", "About us"), ("contact", "Contact us"), ("privacy", "Privacy policy")]
+        ("size-guide", "Size guide"), ("faq", "FAQs"), ("track", "Track your order"), ("about", "About us"), ("contact", "Contact us"), ("privacy", "Privacy policy"), ("terms", "Terms & conditions")]
 
 
 def logo_text():
@@ -246,7 +246,7 @@ def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra=""
     up = "../" * depth; base = CFG["siteUrl"].rstrip("/")
     dl = CFG.get("delivery") or {}
     tp = {"root": up, "wa": wa_digits(), "store": CFG["storeName"], "deal": DEAL, "bundle": CFG.get("bundle", []), "voucher": CFG.get("voucher"),
-          "fee": dl.get("fee", 0), "freeOver": dl.get("freeOver", 0)}
+          "fee": dl.get("fee", 0), "freeOver": dl.get("freeOver", 0), "api": CFG.get("apiUrl") or CFG.get("offersUrl") or ""}
     v = CFG.get("voucher")
     ann = list(CFG.get("announcements") or ["Cash on delivery all over Pakistan"])
     nav = "".join(f'<div class="nv"><a href="{shop_link(up, g=g)}">{g}</a>' + (f'<div class="nv-dd"><a href="{shop_link(up, g=g)}">All {g.lower()}</a>' + "".join(f'<a href="{esc(shop_link(up, g=g, cat=c))}">{esc(c)}</a>' for c in NAV.get(g, [])) + "</div>" if NAV.get(g) else "") + "</div>" for g in GENDERS)
@@ -277,7 +277,8 @@ def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra=""
 <footer class="ft"><div class="ft-in"><div><strong>{logo_text()}</strong><p>{esc(CFG['tagline'])}</p><p class="ft-soc">{soc or (esc('Instagram, Facebook, TikTok: ' + CFG['handle']) if CFG.get('handle') else '')}</p></div>
 <div><strong>Shop</strong><p class="ft-links">{''.join(f'<a href="{shop_link(up, g=g)}">{g}</a>' for g in GENDERS)}<a href="{up}index.html?sort=new#shop">New arrivals</a><a href="{shop_link(up, max=999)}">Under Rs 999</a><a href="{up}wishlist.html">Wishlist</a></p></div>
 <div><strong>Help</strong><p class="ft-links">{help_links}</p></div>
-<div><strong>Order &amp; support</strong><p>WhatsApp / Call <a href="tel:{phone}">{esc(CFG['whatsapp'])}</a>{f'<br><a href="mailto:{esc(CFG["email"])}">{esc(CFG["email"])}</a>' if CFG.get('email') else ''}<br>{esc(CFG.get('city', ''))}<br>Cash on delivery all over Pakistan</p></div></div>
+<div><strong>Order &amp; support</strong><p>WhatsApp / Call <a href="tel:{phone}">{esc(CFG['whatsapp'])}</a>{f'<br><a href="mailto:{esc(CFG["email"])}">{esc(CFG["email"])}</a>' if CFG.get('email') else ''}<br>{esc(CFG.get('city', ''))}<br>Cash on delivery all over Pakistan</p>
+<form class="news" id="news"><b>Naye drops sab se pehle</b><div><input name="email" type="email" required placeholder="Email address" aria-label="Email"><button type="submit">Join</button></div><p class="o-msg" id="news-msg"></p></form></div></div>
 <p class="copy">© {datetime.now().year} {esc(CFG['storeName'])} · {esc(CFG.get('domain', ''))}</p></footer>
 <a class="fab" href="{esc(wa or order_link())}" target="_blank" rel="noopener" aria-label="Ask on WhatsApp">{ICON}<span>{'Ask' if wa else 'Chat'}</span></a>
 <nav class="tabbar" aria-label="Quick links"><a href="{up}index.html">{SVG['home']}<span>Home</span></a><a href="{up}index.html?find=1#shop">{SVG['search']}<span>Search</span></a>
@@ -291,9 +292,12 @@ def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra=""
 <label>Phone / WhatsApp<input name="phone" type="tel" inputmode="tel" required placeholder="03xx xxxxxxx" autocomplete="tel"></label>
 <label>City<input name="city" required maxlength="40" autocomplete="address-level2"></label>
 <label>Full address<textarea name="address" required rows="3" maxlength="300" autocomplete="street-address" placeholder="House, street, area, landmark"></textarea></label>
+<label>Email (optional, order updates ke liye)<input name="email" type="email" inputmode="email" maxlength="80" autocomplete="email" placeholder="you@example.com"></label>
 <label>Note (optional)<input name="note" maxlength="140" placeholder="e.g. call before delivery"></label>
 <div class="bag-sum" id="co-sum"></div><p class="o-msg err" id="co-err" role="alert"></p>
-<button type="submit" class="buy">{ICON}Place order on WhatsApp</button><p class="bag-note">Order WhatsApp par hamare paas aa jayega. Hum confirm kar ke parcel bhej denge.</p></form>
+<button type="submit" class="buy" data-via="site">Place order · Cash on delivery</button><button type="submit" class="ask" data-via="wa">{ICON}Order on WhatsApp</button>
+<label class="chk agree"><input type="checkbox" name="agree" checked> Main <a href="{up}terms.html" target="_blank">terms</a> aur <a href="{up}returns.html" target="_blank">7-day return policy</a> se mutafiq hoon.</label>
+<p class="bag-note">Order number aur confirmation turant milega. Hum WhatsApp ya call par confirm kar ke 24 ghante mein parcel bhejte hain.</p></form>
 <div class="co-done" id="co-done" hidden></div></div></aside>
 <div class="pop" id="pop" hidden><div class="pop-in" role="dialog" aria-label="Free voucher"><button type="button" class="pop-x" data-pop-close aria-label="Close">×</button>
 <p class="eyebrow">Welcome gift</p><h3 id="pop-h"></h3><p id="pop-p"></p><div class="pop-code" id="pop-code" hidden></div><button type="button" class="btn" id="pop-go">Claim free voucher</button></div></div>
@@ -325,7 +329,7 @@ def card(it, up=""):
 
 def offer_box(it):
     mn = -(-int(it["price"] * .6) // 50) * 50
-    if not CFG.get("offersUrl"):
+    if not (CFG.get("apiUrl") or CFG.get("offersUrl")):
         msg = urllib.parse.quote(f"Assalam o alaikum! {it['title']} ({it['sku']}) ke liye meri offer: Rs ")
         return f'<a class="offer-btn" href="https://wa.me/{wa_digits()}?text={msg}" target="_blank" rel="noopener">Make an offer</a>'
     return f"""<section class="offer" id="offer" data-sku="{esc(it['sku'])}" data-price="{it['price']}" data-min="{mn}">
@@ -406,7 +410,7 @@ def bundle_line():
 
 
 def offer_js():
-    url = CFG.get("offersUrl")
+    url = (CFG.get("apiUrl") or CFG.get("offersUrl"))
     if not url: return ""
     return """<script>(function(){var U=%s,box=document.getElementById('offer');if(!box)return;var sku=box.dataset.sku,$=function(i){return document.getElementById(i)},st=null,tick=null;
 function rs(n){return 'Rs '+Math.round(n).toLocaleString('en-PK')}
@@ -432,7 +436,7 @@ refresh();if(saved)mine(saved)})()</script>""" % (json.dumps(url), wa_digits())
 
 
 def index_badges_js():
-    url = CFG.get("offersUrl")
+    url = (CFG.get("apiUrl") or CFG.get("offersUrl"))
     if not url: return ""
     return """<script>fetch(%s+'?a=all').then(function(r){return r.json()}).then(function(m){document.querySelectorAll('.card').forEach(function(c){var s=m[c.dataset.sku];if(!s||!s.highest||c.classList.contains('is-sold'))return;var b=document.createElement('span');b.className='b-offer';b.textContent=s.state==='won'?'Deal done':'Offer Rs '+Math.round(s.highest).toLocaleString('en-PK')+' · '+s.count;c.querySelector('.ci').appendChild(b)})}).catch(function(){})</script>""" % json.dumps(url)
 
@@ -566,12 +570,26 @@ def info_pages():
 <h2>Delivery time</h2><p>{esc(d.get('days', ''))}. Order confirm hone ke 24 ghante ke andar dispatch. Dispatch ke baad tracking number WhatsApp par bheja jata hai.</p>
 <h2>Cash on delivery (COD)</h2><p>Koi advance nahi. Parcel milne par rider ko cash dein. Bara order ho to hum confirmation ke liye call kar sakte hain.</p>
 <h2>Order confirm</h2><p>Har order WhatsApp ya call par confirm hota hai. Confirm na ho sake to order cancel ho jata hai aur item dobara store par aa jata hai.</p>""")
-    P["returns"] = ("Returns & exchange", f"{r} din mein exchange ya return, agar item page ke mutabiq na ho.", f"""
-<h2>Kab return ya exchange hota hai</h2><ul><li>Item page par likhi detail ya photos se mukhtalif ho.</li><li>Size page par diye gaye naap se match na kare.</li><li>Galat item aa jaye.</li></ul>
-<h2>Kaise</h2><p>Parcel milne ke {r} din ke andar WhatsApp <a href="{wa}" target="_blank" rel="noopener">{ph}</a> par order number aur item ki photos bhejein. Item unworn, unwashed aur {esc(CFG['storeName'])} tag ke saath ho.</p>
-<h2>Refund</h2><p>Item wapas milne aur check hone ke baad 3 working days mein JazzCash, EasyPaisa ya bank transfer se refund. Ya agar chahein to doosra item (exchange).</p>
-<h2>Delivery charges</h2><p>Agar ghalti hamari ho (galat item ya detail se mukhtalif) to wapsi ki delivery hum dete hain. Pasand badalne ya size ki wajah se return ho to wapsi ki delivery customer ki.</p>
-<p class="muted">Har item ek hi piece hai, is liye exchange mein wahi item dobara nahi milta; aap koi aur item chun sakte hain.</p>""")
+    P["returns"] = ("Returns & exchange", f"{r} din ki easy return aur exchange policy.", f"""
+<h2>{r}-day return ya exchange</h2><p>Parcel milne ke {r} din ke andar aap item wapas kar sakte hain ya exchange le sakte hain, agar:</p>
+<ul><li>Item page par likhi detail, condition ya photos se mukhtalif ho.</li><li>Size page par diye gaye naap se match na kare.</li><li>Galat item aa jaye ya parcel mein koi item kam ho.</li><li>Pasand na aaye (change of mind) — neeche ki shartein laagu hain.</li></ul>
+<h2>Shartein</h2><ul><li>Item unworn, unwashed aur usi halat mein ho jaisa bheja gaya; {esc(CFG['storeName'])} tag laga ho.</li>
+<li>Parcel ki unboxing video ya photos (khaas taur par galat ya kharab item ke liye) bhejein.</li>
+<li>Pre-loved items par halki si istemal ki nishaniyan normal hain aur page par condition grade ke mutabiq hoti hain; ye return ki wajah nahi.</li>
+<li>Undergarments, socks, swimwear aur "Final sale" likhe items wapas nahi hote.</li>
+<li>Deal of the Day aur offer se khareede items exchange ho sakte hain, cash refund sirf ghalti hamari hone par.</li>
+<li>Har item sirf 1 piece hai, is liye exchange mein wahi item dobara nahi milta; aap barabar qeemat ka koi aur item chun sakte hain.</li></ul>
+<h2>Kaise</h2><p>WhatsApp <a href="{wa}" target="_blank" rel="noopener">{ph}</a> par order number, item code aur photos bhejein. Hum 24 ghante mein jawab dete hain aur return ka tareeqa batate hain.</p>
+<h2>Delivery charges</h2><p>Ghalti hamari ho (galat item, detail se mukhtalif) to wapsi aur dobara bhejne ki delivery hum dete hain. Pasand badalne ya size ki wajah se return ho to wapsi ki delivery customer ki; asal delivery charge wapas nahi hota.</p>
+<h2>Refund</h2><p>Item wapas milne aur check hone ke baad 3 working days mein JazzCash, EasyPaisa ya bank transfer se refund, ya store credit (jo aap chahein).</p>""")
+    P["terms"] = ("Terms & conditions", f"{CFG['storeName']} par shopping ki shartein.", f"""
+<h2>Items</h2><p>Hamare tamam items pre-loved (used) hain. Har item ki condition hamare <a href="condition-guide.html">condition guide</a> ke mutabiq di jati hai aur photos asal item ki hoti hain. Rang screen ke hisaab se thora mukhtalif lag sakta hai.</p>
+<h2>Orders</h2><p>Order lagne ke baad hum WhatsApp ya call par confirm karte hain. 24 ghante mein confirm na ho sake to order cancel ho sakta hai. Har item 1 piece hai; ek hi waqt do orders aayen to pehle confirm hone wale ko milta hai.</p>
+<h2>Qeemat aur payment</h2><p>Tamam qeematein Pakistani Rupees mein hain. Payment cash on delivery. Delivery {esc(delivery_line())}</p>
+<h2>Offers aur vouchers</h2><p>Voucher har customer ke pehle order par ek dafa. Bundle discount bag mein khud lagta hai. Make an offer mein jeetne wali offer 24 ghante mein confirm karni hoti hai.</p>
+<h2>Parcel lena</h2><p>Parcel lete waqt bahar se check kar lein. Bila wajah parcel wapas karne (refuse) par agle order ke liye advance delivery charge liya ja sakta hai.</p>
+<h2>Returns</h2><p>Dekhein <a href="returns.html">Returns &amp; exchange</a> ({r} din).</p>
+<h2>Rabta</h2><p>WhatsApp / Call {ph}</p>""")
     P["condition-guide"] = ("Condition guide", "Hum har item ko khud check kar ke ye grade dete hain.", "".join(f'<div class="cg"><b>{esc(c)}</b><p>{esc(COND_NOTE[c])}</p></div>' for c in CONDS) + """
 <p>Har item dhoya, press kiya aur haath se check kiya jata hai. Photos asal item ki hain. Kisi bhi item ki aur photos ya video ke liye WhatsApp par item code bhejein.</p>""")
     P["size-guide"] = ("Size guide", "International brands ke size mukhtalif hote hain, is liye naap zaroor milayein.", """
@@ -582,7 +600,7 @@ def info_pages():
 <p class="muted">Ye andaza hai. Har item ka asal naap uske page par ya WhatsApp par poochein.</p>""")
     P["faq"] = ("FAQs", "Aksar pooche jane wale sawal.", "".join(f'<details><summary>{esc(q)}</summary><p>{a}</p></details>' for q, a in FAQ))
     P["track"] = ("Track your order", "Apna order number aur phone number dalein.", f"""
-<form class="co track" id="trk"><label>Order number<input name="o" required placeholder="TP-..." autocapitalize="characters"></label><label>Phone number<input name="p" type="tel" inputmode="tel" placeholder="03xx xxxxxxx"></label><button type="submit" class="buy">{ICON}Check status on WhatsApp</button></form>
+<form class="co track" id="trk"><label>Order number<input name="o" required placeholder="TP-..." autocapitalize="characters"></label><label>Phone number<input name="p" type="tel" inputmode="tel" placeholder="03xx xxxxxxx"></label><button type="submit" class="buy">Track order</button></form>
 <div id="my-orders"></div>""")
     P["about"] = ("About us", f"{CFG['storeName']}: pre-loved international brands, hand-picked in Sahiwal.", f"""
 <p>{esc(CFG['storeName'])} ek chhota Pakistani store hai jo pre-loved (used) international brand ke kapre achhi condition mein, munasib qeemat par bechta hai. Hum Sahiwal ki markets se ek ek piece khud chunte hain.</p>
@@ -600,9 +618,16 @@ def info_pages():
     return P
 
 
-TRACK_JS = """<script>(function(){var f=document.getElementById('trk');if(!f)return;var L=function(k,d){try{var v=localStorage.getItem('tp-'+k);return v?JSON.parse(v):d}catch(e){return d}},o=L('orders',[]),box=document.getElementById('my-orders');
+TRACK_JS = """<script>(function(){var f=document.getElementById('trk');if(!f)return;var L=function(k,d){try{var v=localStorage.getItem('tp-'+k);return v?JSON.parse(v):d}catch(e){return d}},o=L('orders',[]),box=document.getElementById('my-orders'),q=new URLSearchParams(location.search).get('o');
+var res=document.createElement('div');res.className='cg';res.hidden=true;f.after(res);
 if(o.length){f.o.value=o[0].no;f.p.value=o[0].phone||'';box.innerHTML='<h2>Aap ke recent orders</h2>'+o.map(function(x){return '<div class="cg"><b>'+x.no+'</b><p>'+x.date+' · '+x.items+' item(s) · Rs '+Math.round(x.total).toLocaleString('en-PK')+'</p></div>'}).join('')}
-f.onsubmit=function(e){e.preventDefault();var t='Assalam o alaikum! Mere order '+f.o.value.trim().toUpperCase()+(f.p.value?' (phone '+f.p.value+')':'')+' ka status bata dein.';window.open('https://wa.me/'+TP.wa+'?text='+encodeURIComponent(t),'_blank')}})()</script>"""
+if(q)f.o.value=q;
+var ST={'new':'Order mil gaya, confirmation baqi','confirmed':'Confirm ho gaya, packing ho rahi hai','dispatched':'Parcel raste mein hai','delivered':'Deliver ho gaya','cancelled':'Cancel ho gaya'};
+function wa(){var t='Assalam o alaikum! Mere order '+f.o.value.trim().toUpperCase()+(f.p.value?' (phone '+f.p.value+')':'')+' ka status bata dein.';window.open('https://wa.me/'+TP.wa+'?text='+encodeURIComponent(t),'_blank')}
+f.onsubmit=function(e){e.preventDefault();if(!TP.api)return wa();res.hidden=false;res.textContent='Check kar raha hoon...';
+ fetch(TP.api+'?'+new URLSearchParams({a:'track',no:f.o.value.trim(),phone:f.p.value})).then(function(r){return r.json()}).then(function(r){if(r.error){res.innerHTML='<p>'+r.error+'</p>';return}
+ res.innerHTML='<b>'+r.no+' · '+r.status+'</b><p>'+(ST[String(r.status).toLowerCase()]||'')+(r.tracking?'<br>Tracking: <b>'+r.tracking+'</b>':'')+'<br>'+r.items+' item(s) · Rs '+Math.round(r.total).toLocaleString('en-PK')+'</p>'}).catch(function(){res.textContent='Network masla. WhatsApp par poochein.';wa()})};
+if(q&&TP.api)f.requestSubmit()})()</script>"""
 
 WISH_BODY = """<section class="infop"><h1>Wishlist</h1><p class="muted">Jo items pasand hain, unhein yahan save karein. Har item sirf 1 piece hai, is liye jaldi order karein.</p><div class="grid" id="wl"></div><p class="empty" id="wl-e" hidden>Wishlist khali hai. Items par ♡ dabayein.</p><p><a class="btn" href="index.html#shop">Shop dekhein</a></p></section>"""
 WISH_JS = """<script>(function(){var w;try{w=JSON.parse(localStorage.getItem('tp-wish')||'[]')}catch(e){w=[]}var g=document.getElementById('wl');document.getElementById('wl-e').hidden=w.length>0;

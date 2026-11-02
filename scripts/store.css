@@ -160,3 +160,5 @@ body:not(:has(.sticky)) .fab{bottom:76px}body:not(:has(.sticky)) .ft{padding-bot
 @media(max-width:640px){.slide{grid-template-columns:1fr 120px;padding:22px 18px;min-height:220px;gap:12px}.sl-tx h2{font-size:26px}.sl-tx p{font-size:13.5px;margin-bottom:12px}.sl-img img{max-width:120px}.slide .btn{padding:10px 16px;font-size:14px}}
 .sl-img img{height:auto}
 @media(min-width:861px){.gtile{aspect-ratio:auto;height:380px}}
+.co .ask{width:100%;background:#fff;cursor:pointer;font:inherit;font-weight:700}.co .agree{font-size:12.5px;font-weight:500}.co .agree input{width:auto}
+.news{display:grid;gap:6px;margin-top:14px}.news div{display:flex;gap:6px}.news input{flex:1;min-width:0;padding:9px 12px;border-radius:10px;border:0;font-size:14px}.news button{border:0;border-radius:10px;padding:9px 14px;background:var(--gold);color:var(--ink);font-weight:700;cursor:pointer}.news .o-msg{color:#d9dfdc}

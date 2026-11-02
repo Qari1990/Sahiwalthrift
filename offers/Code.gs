@@ -1,9 +1,13 @@
 /**
- * Sahiwal Thrift Co. offers backend (Google Apps Script, free).
+ * ABCThrift store backend (Google Apps Script, free): website orders, order tracking,
+ * email notifications, newsletter sign-ups and make-an-offer.
  *
  * Setup: create a Google Sheet, Extensions > Apps Script, paste this file, run `setup` once,
  * then Deploy > New deployment > Web app (Execute as: Me, Who has access: Anyone).
- * Put the web app URL in site.json as "offersUrl".
+ * Put the web app URL in site.json as "apiUrl".
+ *
+ *   Orders       one row per website order. Change "status" (Confirmed, Dispatched, Delivered,
+ *                Cancelled) and fill "tracking"; the customer gets an email for each change.
  *
  * Sheets it creates:
  *   Offers  one row per offer. To counter, type an amount in the "counter" column.
@@ -11,7 +15,9 @@
  *   Items   one row per item that got an offer. "reserve" is your hidden lowest price
  *           (default 75% of the listed price); set "state" to "sold" when it sells elsewhere.
  */
-const SITE = "https://qari1990.github.io/Sahiwalthrift";
+const SITE = "https://abcthrift.store";
+const STORE = "ABCThrift";
+const WHATSAPP = "923114139007";
 const MIN_PCT = 0.6;       // offers below 60% of the price are refused
 const RESERVE_PCT = 0.75;  // a 48-hour winner must reach this unless you change "reserve"
 const WINDOW_H = 48;       // bidding window, counted from the first offer
@@ -20,10 +26,12 @@ const STEP = 50;           // a new offer must beat the highest by at least this
 
 const OFFER_COLS = ["at", "sku", "name", "phone", "amount", "status", "counter", "counterAt", "note"];
 const ITEM_COLS = ["sku", "title", "price", "reserve", "firstAt", "endsAt", "state", "winnerPhone", "winnerAmount"];
+const ORDER_COLS = ["at", "no", "status", "name", "phone", "email", "city", "address", "note", "items", "subtotal", "discount", "delivery", "total", "tracking", "updated"];
+const SUB_COLS = ["at", "email", "phone"];
 
 function setup() {
   const ss = SpreadsheetApp.getActive();
-  [["Offers", OFFER_COLS], ["Items", ITEM_COLS]].forEach(([n, cols]) => {
+  [["Offers", OFFER_COLS], ["Items", ITEM_COLS], ["Orders", ORDER_COLS], ["Subscribers", SUB_COLS]].forEach(([n, cols]) => {
     const sh = ss.getSheetByName(n) || ss.insertSheet(n);
     sh.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
     sh.setFrozenRows(1);
@@ -31,6 +39,7 @@ function setup() {
   ScriptApp.getProjectTriggers().forEach((t) => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger("closeExpired").timeBased().everyHours(1).create();
   ScriptApp.newTrigger("onSheetEdit").forSpreadsheet(ss).onEdit().create();
+  ScriptApp.newTrigger("onOrderEdit").forSpreadsheet(ss).onEdit().create();
 }
 
 /* ---------- web endpoints ---------- */
@@ -41,7 +50,7 @@ function handle(p) {
   const lock = LockService.getScriptLock(); lock.waitLock(10000);
   try {
     closeExpired();
-    const out = ({ state: () => state(p.sku), all: allStates, offer: () => makeOffer(p), mine: () => mine(p.sku, p.phone), accept: () => acceptCounter(p.sku, p.phone) }[p.a] || (() => ({ error: "unknown action" })))();
+    const out = ({ state: () => state(p.sku), all: allStates, offer: () => makeOffer(p), mine: () => mine(p.sku, p.phone), accept: () => acceptCounter(p.sku, p.phone), order: () => placeOrder(p), track: () => track(p.no, p.phone), subscribe: () => subscribe(p) }[p.a] || (() => ({ error: "unknown action" })))();
     return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ error: String(err.message || err) })).setMimeType(ContentService.MimeType.JSON);
@@ -106,7 +115,7 @@ function makeOffer(p) {
   if (!phone) return { error: "Sahi WhatsApp number likhein (03xx xxxxxxx)" };
   const s = state(p.sku);
   if (s.state !== "open") return { error: s.state === "sold" ? "Ye item bik chuka hai" : "Is item par offers band ho chuki hain" };
-  if (amount >= c.price) return { error: "Ye poori price hai. Seedha 'Buy on WhatsApp' dabayein, item aap ka." };
+  if (amount >= c.price) return { error: "Ye poori price hai. Seedha 'Buy now' dabayein, item aap ka." };
   if (amount < s.minOffer) return { error: `Kam se kam offer ${s.minOffer} hai` };
   if (s.highest && amount < s.highest + STEP) return { error: `Abhi sab se oonchi offer ${s.highest} hai. Kam se kam ${s.highest + STEP} offer karein.` };
   const mineOld = offers().filter((o) => o.sku === p.sku && o.phone == phone && ["new", "countered"].includes(o.status));
@@ -166,6 +175,75 @@ function onSheetEdit(e) {
   if (col === "counter" && +o.counter > 0) { o.status = "countered"; o.counterAt = new Date(); put("Offers", OFFER_COLS, o);
     o.note = `https://wa.me/92${String(o.phone).slice(1)}?text=` + encodeURIComponent(`Assalam o alaikum ${o.name}! ${o.sku} ke liye aap ki offer Rs ${o.amount} ke jawab mein hamari counter offer Rs ${o.counter} hai, ${COUNTER_H} ghante ke liye. Accept karne ke liye: ${SITE}/p/${o.sku}.html`); put("Offers", OFFER_COLS, o); }
   if (col === "status" && o.status === "won") win(o.sku, o);
+}
+
+/* ---------- website orders ---------- */
+const orders = () => rows("Orders", ORDER_COLS);
+const rs = (n) => "Rs " + Math.round(+n || 0).toLocaleString("en-US");
+const validEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || "").trim());
+
+function placeOrder(p) {
+  const name = String(p.name || "").trim().slice(0, 60), phone = cleanPhone(p.phone), email = validEmail(p.email) ? String(p.email).trim() : "";
+  const city = String(p.city || "").trim().slice(0, 40), address = String(p.address || "").trim().slice(0, 300), note = String(p.note || "").trim().slice(0, 140);
+  if (!name || !city || address.length < 8) return { error: "Naam, city aur poora address likhein" };
+  if (!phone) return { error: "Sahi mobile number likhein (03xx xxxxxxx)" };
+  const cat = catalog(), list = (p.items || []).slice(0, 20);
+  if (!list.length) return { error: "Bag khali hai" };
+  const gone = list.filter((i) => !cat[i.sku] || cat[i.sku].status === "Sold" || orders().some((o) => !/cancel/i.test(o.status) && String(o.items).indexOf("[" + i.sku + "]") > -1));
+  if (gone.length) return { error: "Ye item ab available nahi: " + gone.map((i) => i.sku).join(", ") + ". Bag se hata kar dobara order karein.", gone: gone.map((i) => i.sku) };
+  const d = Utilities.formatDate(new Date(), "Asia/Karachi", "yyMMdd");
+  const no = "AT-" + d + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+  const lines = list.map((i) => `${i.b || ""} ${i.n || ""}${i.s ? " (size " + i.s + ")" : ""} [${i.sku}] ${rs(i.price)}`);
+  const o = { at: new Date(), no, status: "New", name, phone, email, city, address, note, items: lines.join("\n"), subtotal: +p.subtotal || 0, discount: +p.discount || 0, delivery: +p.delivery || 0, total: +p.total || 0, updated: new Date() };
+  add("Orders", ORDER_COLS, o);
+  const wa = `https://wa.me/92${phone.slice(1)}?text=` + encodeURIComponent(`Assalam o alaikum ${name}! ${STORE} se aap ka order ${no} (${rs(o.total)}) mil gaya hai. Confirm karne ke liye "Yes" likh dein.`);
+  notify(`Naya order ${no}: ${rs(o.total)} (${city})`, `${name}\n${phone}${email ? "\n" + email : ""}\n${city}\n${address}${note ? "\nNote: " + note : ""}\n\n${o.items}\n\nSubtotal ${rs(o.subtotal)}\nDiscount -${rs(o.discount)}\nDelivery ${rs(o.delivery)}\nTotal ${rs(o.total)} (COD)\n\nCustomer ko confirm karein: ${wa}\nStatus badalne ke liye Orders sheet mein "status" column badlein.`);
+  if (email) mailCustomer(o, "Order received", `Shukriya ${name}! Aap ka order hamein mil gaya hai. Hum jald WhatsApp ya call par confirm karenge.`);
+  return { ok: true, no, total: o.total };
+}
+
+function track(no, phone) {
+  no = String(no || "").trim().toUpperCase(); phone = cleanPhone(phone);
+  const o = orders().find((x) => String(x.no).toUpperCase() === no);
+  if (!o || (phone && String(o.phone).replace(/\D/g, "").slice(-10) !== phone.slice(-10))) return { error: "Order nahi mila. Order number aur phone check karein." };
+  return { no: o.no, status: o.status, tracking: o.tracking, total: +o.total, items: String(o.items).split("\n").length, at: ms(o.at), updated: ms(o.updated) };
+}
+
+function subscribe(p) {
+  const email = validEmail(p.email) ? String(p.email).trim() : "", phone = cleanPhone(p.phone);
+  if (!email && !phone) return { error: "Email ya WhatsApp number likhein" };
+  add("Subscribers", SUB_COLS, { at: new Date(), email, phone });
+  return { ok: true, message: "Shukriya! Naye drops aur offers sab se pehle aap ko milenge." };
+}
+
+const STATUS_TEXT = {
+  confirmed: "Aap ka order confirm ho gaya hai. Hum 24 ghante mein parcel dispatch kar denge.",
+  dispatched: "Aap ka parcel dispatch ho gaya hai.",
+  delivered: "Aap ka parcel deliver ho gaya. Shopping ka shukriya! Koi masla ho to 7 din ke andar WhatsApp karein.",
+  cancelled: "Aap ka order cancel kar diya gaya hai. Koi sawal ho to WhatsApp karein.",
+};
+
+function mailCustomer(o, title, msg) {
+  if (!validEmail(o.email)) return;
+  const items = String(o.items).split("\n").map((l) => `<li>${l}</li>`).join("");
+  const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#15201d">
+<h2 style="margin:0 0 4px">${STORE}</h2><p style="color:#66706c;margin:0 0 16px">${title}</p>
+<p>${msg}</p><p><b>Order ${o.no}</b> · ${o.status}</p><ul>${items}</ul>
+<p>Total <b>${rs(o.total)}</b> (cash on delivery)${o.tracking ? `<br>Tracking: <b>${o.tracking}</b>` : ""}</p>
+<p><a href="${SITE}/track.html?o=${encodeURIComponent(o.no)}" style="background:#15201d;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Track order</a>
+&nbsp; <a href="https://wa.me/${WHATSAPP}" style="color:#1f8f4e">WhatsApp us</a></p>
+<p style="color:#66706c;font-size:12px">${SITE} · 7-day returns · Cash on delivery all over Pakistan</p></div>`;
+  try { MailApp.sendEmail({ to: o.email, subject: `${STORE} order ${o.no}: ${title}`, htmlBody: html, name: STORE }); } catch (e) {}
+}
+
+function onOrderEdit(e) {
+  const sh = e.range.getSheet(); if (sh.getName() !== "Orders" || e.range.getRow() < 2) return;
+  const col = ORDER_COLS[e.range.getColumn() - 1]; if (col !== "status" && col !== "tracking") return;
+  const o = orders().find((x) => x._row === e.range.getRow()); if (!o) return;
+  o.updated = new Date(); put("Orders", ORDER_COLS, o);
+  const k = String(o.status).toLowerCase();
+  if (col === "status" && STATUS_TEXT[k]) mailCustomer(o, "Order " + o.status, STATUS_TEXT[k]);
+  if (col === "tracking" && o.tracking) mailCustomer(o, "Tracking number", "Aap ke parcel ka tracking number neeche hai.");
 }
 
 function notify(subject, body) { try { MailApp.sendEmail(Session.getEffectiveUser().getEmail(), subject, body); } catch (e) {} }
