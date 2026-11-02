@@ -1,4 +1,4 @@
-"""Build the Thrifty.pk store into public/.
+"""Build the ABCThrift store into public/.
 
 Usage: python3 scripts/build.py <items_dir> <assets_dir>
   items_dir   inventory JSON exported from the Landa Lister (one file per SKU)
@@ -223,7 +223,9 @@ INFO = [("how-to-order", "How to order"), ("shipping", "Delivery & COD"), ("retu
 
 
 def logo_text():
-    n = esc(CFG["storeName"]); i = n.rfind(".")
+    n = esc(CFG["storeName"]); a = esc(CFG.get("logoAccent", ""))
+    if a and n.endswith(a): return f"{n[:-len(a)]}<em>{a}</em>"
+    i = n.rfind(".")
     return f"{n[:i]}<em>{n[i:]}</em>" if i > 0 else n
 
 
@@ -262,7 +264,7 @@ def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra=""
 <script>window.TP={json.dumps(tp).replace("</", "<\\/")};</script></head><body>
 <div class="topbar"><div class="ann" id="ann">{''.join(f'<span{" class=on" if not i else ""}>{esc(a)}</span>' for i, a in enumerate(ann))}</div>{f'<button type="button" class="tb-v" data-voucher>Free {rs(v["amount"])} voucher</button>' if v else ''}</div>
 <header class="hd"><button type="button" class="hd-ic hd-menu" data-menu-open aria-label="Open menu">{SVG['menu']}</button>
-<a class="logo" href="{up}index.html"><span class="mark">T</span><span>{logo_text()}</span></a>
+<a class="logo" href="{up}index.html"><span class="mark">{esc(CFG["storeName"][:1])}</span><span>{logo_text()}</span></a>
 <nav class="mainnav" aria-label="Main">{nav}<a href="{up}index.html?sort=new#shop">New arrivals</a><a href="{up}index.html#deal" class="dl">Deal of the Day</a><a href="{shop_link(up, max=999)}">Under Rs 999</a></nav>
 <div class="hd-act"><a class="hd-ic" href="{up}index.html?find=1#shop" aria-label="Search">{SVG['search']}</a><a class="hd-ic" href="{up}wishlist.html" aria-label="Wishlist">{SVG['heart']}<span class="bag-n" data-wish-n hidden>0</span></a>
 <button type="button" class="hd-ic hd-bag" data-bag-open aria-label="Open bag">{SVG['bag']}<span class="bag-n" id="bag-n" hidden>0</span></button></div></header>
@@ -272,7 +274,7 @@ def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra=""
 <details><summary>Help</summary>{help_links}</details>
 <a class="buy" href="{esc(order_link())}" target="_blank" rel="noopener">{ICON}Chat on WhatsApp</a></div></aside>
 <main>{body}</main>
-<footer class="ft"><div class="ft-in"><div><strong>{logo_text()}</strong><p>{esc(CFG['tagline'])}</p><p class="ft-soc">{soc or esc('Instagram, Facebook, TikTok: ' + CFG['handle'])}</p></div>
+<footer class="ft"><div class="ft-in"><div><strong>{logo_text()}</strong><p>{esc(CFG['tagline'])}</p><p class="ft-soc">{soc or (esc('Instagram, Facebook, TikTok: ' + CFG['handle']) if CFG.get('handle') else '')}</p></div>
 <div><strong>Shop</strong><p class="ft-links">{''.join(f'<a href="{shop_link(up, g=g)}">{g}</a>' for g in GENDERS)}<a href="{up}index.html?sort=new#shop">New arrivals</a><a href="{shop_link(up, max=999)}">Under Rs 999</a><a href="{up}wishlist.html">Wishlist</a></p></div>
 <div><strong>Help</strong><p class="ft-links">{help_links}</p></div>
 <div><strong>Order &amp; support</strong><p>WhatsApp / Call <a href="tel:{phone}">{esc(CFG['whatsapp'])}</a>{f'<br><a href="mailto:{esc(CFG["email"])}">{esc(CFG["email"])}</a>' if CFG.get('email') else ''}<br>{esc(CFG.get('city', ''))}<br>Cash on delivery all over Pakistan</p></div></div>
@@ -315,7 +317,7 @@ def card(it, up=""):
     badge = '<span class="b-sold">Sold out</span>' if sold else (f'<span class="b-off">-{off(it)}%</span>' if off(it) else '<span class="b-new">Just in</span>' if it.get("fresh") else '')
     return f"""<article class="card{' is-sold' if sold else ''}" data-sku="{esc(it['sku'])}" data-cat="{esc(it['category'])}" data-g="{esc(it['gender'])}" data-size="{esc(it['size'])}" data-brand="{esc(it['brand'])}" data-cond="{esc(it['cond'])}" data-price="{it['price']}" data-off="{off(it)}" data-new="{esc(it['created'])}" data-q="{esc((it['title'] + ' ' + it['brand'] + ' ' + it['category'] + ' ' + it['color'] + ' ' + it['sku']).lower())}">
 <a class="cl" href="{up}p/{esc(it['sku'])}.html"><div class="ci">{f'<img src="{img}" alt="{esc(it["brand"] + " " + it["name"])}" loading="lazy" width="600" height="600">' if img else ''}{f'<img class="alt" src="{img2}" alt="" loading="lazy" width="600" height="600">' if img2 else ''}{badge}{'<span class="b-deal dl">Deal of the Day</span>' if DEAL.get('sku') == it['sku'] and not sold else ''}{f'<span class="b-size">{esc(it["size"])}</span>' if it['size'] else ''}</div>
-<div class="cb"><span class="cbrand">{esc(it['brand'])}</span><span class="ct">{esc(it['name'])}</span>
+<div class="cb"><span class="cbrand">{esc(it['brand'])} <small>({esc(it['sku'])})</small></span><span class="ct">{esc(it['name'])}</span>
 <span class="cmeta"><span class="cond">{esc(it['cond'])}</span>{'' if sold else '<span>Only 1</span>'}</span>{price_html(it)}</div></a>
 <button type="button" class="cwish" data-wish="{bag_data(it)}" aria-label="Save {esc(it['name'])} to wishlist">{SVG['heart']}</button>
 {'' if sold else f'<button type="button" class="cadd" data-add="{bag_data(it)}" aria-label="Add {esc(it["name"])} to bag">+</button>'}</article>"""
@@ -436,6 +438,32 @@ def index_badges_js():
 
 
 
+def hero_slides(live, v):
+    def pic(f):
+        return next((i for i in live if i["images"] and f(i)), None)
+    out = []
+    spec = [("Winter New Arrivals", "Hand-picked international brands, washed and checked. Har piece sirf 1.", "Shop new arrivals", "index.html?sort=new#shop", pic(lambda i: True), "s1"),
+            ("Kids Winter Wear", "Jackets, hoodies aur snowsuits, branded aur sasti.", "Shop kids", shop_link(g="Kids"), pic(lambda i: i["gender"] == "Kids"), "s2"),
+            ("Women's Collection", "Sweaters, cardigans aur jackets jo budget mein aayen.", "Shop women", shop_link(g="Women"), pic(lambda i: in_gender(i, "Women")), "s3"),
+            (f"Free {rs(v['amount'])} voucher" if v else "Cash on delivery", f"Pehle order par code {esc(v['code'])}. Cash on delivery all over Pakistan." if v else "Pay when the parcel arrives.", "Claim voucher" if v else "Shop now", "#shop", pic(lambda i: i["price"] < 1000) or pic(lambda i: True), "s4")]
+    seen = set()
+    for t, sub, btn, href, it, cls in spec:
+        if it is None and cls != "s4": continue
+        if it and it["sku"] in seen and cls in ("s2", "s3"): continue
+        if it: seen.add(it["sku"])
+        img = f'<img src="img/{it["sku"]}-1.jpg" alt="" width="600" height="600"{" loading=lazy" if out else ""}>' if it else ""
+        act = f'<button type="button" class="btn" data-voucher>{btn}</button>' if cls == "s4" and v else f'<a class="btn" href="{esc(href)}">{btn}</a>'
+        out.append(f'<div class="slide {cls}"><div class="sl-tx"><p class="eyebrow">{esc(CFG["storeName"])}</p><h2>{esc(t)}</h2><p>{sub}</p>{act}</div><div class="sl-img">{img}</div></div>')
+    return "".join(out)
+
+
+SLIDER_JS = """<script>(function(){var t=document.getElementById('sl-track'),d=document.getElementById('sl-dots');if(!t)return;var n=t.children.length,i=0,tm;
+d.innerHTML=Array.prototype.map.call(t.children,function(_,k){return '<button type="button" aria-label="Slide '+(k+1)+'"></button>'}).join('');var b=d.children;
+function mark(){for(var k=0;k<n;k++)b[k].setAttribute('aria-current',k===i)}function go(k){i=(k+n)%n;t.scrollTo({left:t.clientWidth*i,behavior:'smooth'});mark()}
+Array.prototype.forEach.call(b,function(x,k){x.onclick=function(){go(k);rs()}});t.addEventListener('scroll',function(){var k=Math.round(t.scrollLeft/t.clientWidth);if(k!==i){i=k;mark()}},{passive:true});
+function rs(){clearInterval(tm);tm=setInterval(function(){go(i+1)},5000)}mark();if(n>1)rs()})()</script>"""
+
+
 def index_page(items):
     live = [i for i in items if i["status"] != "Sold"]
     cats = sorted({i["category"] for i in items}); sizes = [s for s in dict.fromkeys(i["size"] for i in live) if s]
@@ -454,15 +482,15 @@ def index_page(items):
         tiles += f'<a class="gtile" href="{shop_link(g=g)}">{f"<img src=img/{pic["sku"]}-1.jpg alt=\"\" loading=lazy width=600 height=600>" if pic else ""}<span><b>{g}</b><em>{len(gi)} pieces</em></span></a>'
     pills = "".join(f'<a href="{esc(shop_link(cat=c))}">{esc(c)} <em>{sum(i["category"] == c for i in live)}</em></a>' for c in sorted({i["category"] for i in live}))
     conds = "".join(f'<a href="{esc(shop_link(cond=c))}"><b>{esc(c)}</b><span>{esc(COND_NOTE[c])}</span></a>' for c in CONDS if any(i["cond"] == c for i in live))
-    body = f"""<section class="hero"><div><p class="eyebrow">{esc(CFG['storeName'])} · Hand-picked pre-loved fashion</p><h1>International brands.<br>Affordable prices.</h1>
-<p>{esc(CFG['tagline'])}</p><div class="cta"><a class="btn" href="#shop">Shop now</a>{f'<button type="button" class="btn ghost" data-voucher>Get {rs(v["amount"])} off</button>' if v else ''}</div></div></section>
+    slides = hero_slides(live, v)
+    body = f"""<section class="slider" id="slider" aria-label="Highlights"><div class="sl-track" id="sl-track">{slides}</div><div class="sl-dots" id="sl-dots"></div></section>
 <section class="gtiles" style="--n:{tiles.count('class="gtile"')}" aria-label="Shop by">{tiles}</section>
 {f'<nav class="pills" aria-label="Categories">{pills}</nav>' if pills else ''}
 {deal}
 <section class="trust"><div><b>Cash on delivery</b><span>Pay when the parcel arrives</span></div><div><b>{'Free delivery over ' + rs(dl['freeOver']) if dl.get('freeOver') else 'Nationwide delivery'}</b><span>{esc(dl.get('days', 'All over Pakistan'))}</span></div><div><b>Hand-checked</b><span>Washed, pressed, photographed for real</span></div><div><b>{CFG.get('returns', {}).get('days', 3)}-day exchange</b><span>If it doesn't match the page</span></div></section>
 <section class="offers3"><div><b>Bundle &amp; save</b><span>{esc(bundle_line())}</span></div>{f'<div><b>Welcome voucher</b><span>{rs(v["amount"])} off your first order over {rs(v["minOrder"])}</span></div>' if v else ''}<div><b>Only 1 of each</b><span>Every piece is one-off. Pasand aaye to der na karein.</span></div></section>
 <section class="rv" id="rv" hidden><h2>Recently viewed</h2><div class="rv-row"></div></section>
-<section id="shop" class="shop"><div class="shop-hd"><h2 id="shop-h">Latest arrivals <span class="muted" id="count">{len(live)} items</span></h2>
+<section id="shop" class="shop"><div class="shop-hd"><h2 id="shop-h">Latest Arrivals <span class="muted" id="count">{len(live)} items</span></h2>
 <input id="q" type="search" placeholder="Search brand, item, colour, code" aria-label="Search"></div>
 <div class="brands" aria-label="Shop by brand">{''.join(f'<button type="button" data-brand="{esc(b)}">{esc(b)}</button>' for b in brands)}</div>
 <div class="filters"><div class="chips" id="g">{''.join(f'<button type="button" data-v="{g}">{g}</button>' for g in ['All', *GENDERS])}</div>
@@ -481,7 +509,7 @@ function setG(v){g=v;document.querySelectorAll('#g button').forEach(function(x){
 function run(){var v=q.value.trim().toLowerCase(),n=0;cards.forEach(function(c){var ok=(!mx.value||+c.dataset.price<=+mx.value)&&(g==='All'||c.dataset.g===g||(g!=='Kids'&&c.dataset.g==='Unisex'))&&(!cat.value||c.dataset.cat===cat.value)&&(!size.value||c.dataset.size===size.value)&&(!cond.value||c.dataset.cond===cond.value)&&(!brand||c.dataset.brand===brand)&&(!v||c.dataset.q.indexOf(v)>-1)&&(sold.checked||!c.classList.contains('is-sold'));c.hidden=!ok;if(ok)n++});
  var s=sort.value;cards.slice().sort(function(a,b){return s==='low'?a.dataset.price-b.dataset.price:s==='high'?b.dataset.price-a.dataset.price:s==='off'?b.dataset.off-a.dataset.off:(a.dataset['new']<b.dataset['new']?1:-1)}).forEach(function(c){grid.appendChild(c)});
  var f=g!=='All'||cat.value||size.value||cond.value||mx.value||brand||v;$('clear').hidden=!f;
- $('shop-h').firstChild.textContent=(f?[g!=='All'?g:'',cat.value,cond.value,brand].filter(Boolean).join(' · ')||'Results':'Latest arrivals')+' ';
+ $('shop-h').firstChild.textContent=(f?[g!=='All'?g:'',cat.value,cond.value,brand].filter(Boolean).join(' · ')||'Results':'Latest Arrivals')+' ';
  $('count').textContent=n+' items';$('empty').hidden=n>0}
 document.querySelectorAll('#g button').forEach(function(b){b.onclick=function(){setG(b.dataset.v);run()}});
 [q,cat,size,cond,sort,sold,mx].forEach(function(e){e.addEventListener('input',run)});
@@ -495,7 +523,7 @@ fromUrl();window.addEventListener('popstate',fromUrl);
 document.addEventListener('click',function(e){var a=e.target.closest('a[href*="#shop"]');if(!a||a.pathname!==location.pathname)return;e.preventDefault();history.pushState(null,'',a.href);fromUrl();var m=$('menu');if(m&&!m.hidden){m.hidden=true;document.body.classList.remove('noscroll')}$('shop').scrollIntoView({behavior:'smooth'})})})()</script>"""
     org = {"@context": "https://schema.org", "@type": "ClothingStore", "name": CFG["storeName"], "url": CFG["siteUrl"].rstrip("/") + "/", "telephone": "+" + wa_digits(),
            "address": {"@type": "PostalAddress", "addressLocality": "Sahiwal", "addressRegion": "Punjab", "addressCountry": "PK"}, "paymentAccepted": "Cash on delivery", "currenciesAccepted": "PKR"}
-    return page(f"{CFG['storeName']} | Pre-loved international brands in Pakistan, cash on delivery", CFG["tagline"], body, 0, f"img/{live[0]['sku']}-1.jpg" if live and live[0]["images"] else None, "", None, js + index_badges_js(), [org])
+    return page(f"{CFG['storeName']} | Pre-loved international brands in Pakistan, cash on delivery", CFG["tagline"], body, 0, f"img/{live[0]['sku']}-1.jpg" if live and live[0]["images"] else None, "", None, js + SLIDER_JS + index_badges_js(), [org])
 
 
 # ---------- info pages ----------
@@ -540,7 +568,7 @@ def info_pages():
 <h2>Order confirm</h2><p>Har order WhatsApp ya call par confirm hota hai. Confirm na ho sake to order cancel ho jata hai aur item dobara store par aa jata hai.</p>""")
     P["returns"] = ("Returns & exchange", f"{r} din mein exchange ya return, agar item page ke mutabiq na ho.", f"""
 <h2>Kab return ya exchange hota hai</h2><ul><li>Item page par likhi detail ya photos se mukhtalif ho.</li><li>Size page par diye gaye naap se match na kare.</li><li>Galat item aa jaye.</li></ul>
-<h2>Kaise</h2><p>Parcel milne ke {r} din ke andar WhatsApp <a href="{wa}" target="_blank" rel="noopener">{ph}</a> par order number aur item ki photos bhejein. Item unworn, unwashed aur Thrifty.pk tag ke saath ho.</p>
+<h2>Kaise</h2><p>Parcel milne ke {r} din ke andar WhatsApp <a href="{wa}" target="_blank" rel="noopener">{ph}</a> par order number aur item ki photos bhejein. Item unworn, unwashed aur {esc(CFG['storeName'])} tag ke saath ho.</p>
 <h2>Refund</h2><p>Item wapas milne aur check hone ke baad 3 working days mein JazzCash, EasyPaisa ya bank transfer se refund. Ya agar chahein to doosra item (exchange).</p>
 <h2>Delivery charges</h2><p>Agar ghalti hamari ho (galat item ya detail se mukhtalif) to wapsi ki delivery hum dete hain. Pasand badalne ya size ki wajah se return ho to wapsi ki delivery customer ki.</p>
 <p class="muted">Har item ek hi piece hai, is liye exchange mein wahi item dobara nahi milta; aap koi aur item chun sakte hain.</p>""")
@@ -560,10 +588,10 @@ def info_pages():
 <p>{esc(CFG['storeName'])} ek chhota Pakistani store hai jo pre-loved (used) international brand ke kapre achhi condition mein, munasib qeemat par bechta hai. Hum Sahiwal ki markets se ek ek piece khud chunte hain.</p>
 <p>Har item dhoya, press kiya aur haath se check kiya jata hai, phir asal photos aur seedhi si condition ke saath store par lagta hai. Har item sirf 1 piece hai.</p>
 <p>Purane kapre dobara pehnna paise bhi bachata hai aur mahol ke liye bhi achha hai.</p>
-<p>Follow: {esc(CFG['handle'])}</p>""")
+{f'<p>Follow: {esc(CFG["handle"])}</p>' if CFG.get('handle') else ''}""")
     P["contact"] = ("Contact us", "Sawal, order ya size? Hum WhatsApp par jaldi jawab dete hain.", f"""
 <p><a class="buy" href="{wa}" target="_blank" rel="noopener">{ICON}WhatsApp {ph}</a></p>
-<p>Call: <a href="tel:{esc(CFG['whatsapp'].replace(' ', ''))}">{ph}</a>{f'<br>Email: <a href="mailto:{esc(CFG["email"])}">{esc(CFG["email"])}</a>' if CFG.get('email') else ''}<br>{esc(CFG.get('city', ''))}<br>Social: {esc(CFG['handle'])}</p>
+<p>Call: <a href="tel:{esc(CFG['whatsapp'].replace(' ', ''))}">{ph}</a>{f'<br>Email: <a href="mailto:{esc(CFG["email"])}">{esc(CFG["email"])}</a>' if CFG.get('email') else ''}<br>{esc(CFG.get('city', ''))}{'<br>Social: ' + esc(CFG['handle']) if CFG.get('handle') else ''}</p>
 <p class="muted">Timing: roz 11 am se 10 pm tak.</p>""")
     P["privacy"] = ("Privacy policy", "Hum aap ki maloomat sirf order poora karne ke liye istemal karte hain.", """
 <p>Checkout par aap jo naam, phone aur address dete hain wo sirf aap ke order ki delivery aur rabte ke liye istemal hota hai, aur courier company ke saath share hota hai. Hum ye maloomat kisi aur ko nahi bechte.</p>

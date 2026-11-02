@@ -1,8 +1,8 @@
-:root{--ink:#15201d;--muted:#66706c;--line:#e5e2db;--bg:#faf8f4;--card:#fff;--acc:#c8553d;--gold:#e9c46a;--ok:#1f7a45;--wa:#1f8f4e}
+:root{--ink:#15201d;--muted:#66706c;--line:#e5e2db;--bg:#ffffff;--card:#fff;--acc:#c8553d;--gold:#e9c46a;--ok:#1f7a45;--wa:#1f8f4e}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}
 a{color:inherit}img{display:block;max-width:100%}button,input,select{font:inherit;color:inherit}
 .topbar{background:var(--ink);color:#fff;font-size:12.5px;display:flex;justify-content:center;flex-wrap:wrap;gap:4px 14px;padding:7px 16px}.tb-v{background:none;border:0;color:var(--gold);font-weight:700;text-decoration:underline;cursor:pointer;padding:0;font-size:12.5px}
-.hd{position:sticky;top:0;z-index:20;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px max(16px,calc((100% - 1180px)/2));background:rgba(250,248,244,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.hd{position:sticky;top:0;z-index:20;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px max(16px,calc((100% - 1180px)/2));background:rgba(255,255,255,.96);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .logo{display:flex;align-items:center;gap:10px;text-decoration:none;font-weight:900;font-size:21px;letter-spacing:-.03em}.logo em,.ft strong em{font-style:normal;color:var(--acc)}.mark{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--ink);color:var(--gold);font-size:19px}
 .hd nav{display:flex;align-items:center;gap:18px;font-size:14px;font-weight:500}.hd nav a{text-decoration:none}.hd-wa{display:flex;align-items:center;gap:6px;background:var(--wa);color:#fff;padding:7px 12px;border-radius:999px}.hd-wa svg{width:16px;height:16px;fill:#fff}
 @media(max-width:640px){.hd nav a:not(.hd-wa){display:none}.hd-wa span{display:none}}
@@ -146,3 +146,17 @@ body:not(:has(.sticky)) .fab{bottom:76px}body:not(:has(.sticky)) .ft{padding-bot
 @media(max-width:860px){.hd .mainnav{display:none!important}}
 .sticky .sp{white-space:nowrap}
 @media(max-width:640px){.hero{padding:30px 20px;margin:14px 0}.hero h1{font-size:30px}.hero p{font-size:14.5px}}
+/* v4: ABCThrift slider + white theme */
+.cbrand small{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0}
+.card{border-color:#ece9e2}.ci{background:#f4f2ee}
+.slider{position:relative;margin:16px 0 20px}
+.sl-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;border-radius:20px}.sl-track::-webkit-scrollbar{display:none}
+.slide{flex:0 0 100%;scroll-snap-align:start;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);align-items:center;gap:20px;padding:36px 40px;min-height:360px;color:#fff;background:linear-gradient(120deg,#15201d,#2f4b43)}
+.slide.s2{background:linear-gradient(120deg,#7a2e1f,#c8553d)}.slide.s3{background:linear-gradient(120deg,#3b2f5c,#7a5ea8)}.slide.s4{background:linear-gradient(120deg,#8a6a12,#e9c46a);color:var(--ink)}
+.slide.s4 .eyebrow{color:var(--ink)}.slide.s4 .btn{background:var(--ink);color:#fff}
+.sl-tx h2{font-size:clamp(28px,5vw,50px);line-height:1.05;letter-spacing:-.03em;margin:6px 0 10px;text-transform:uppercase;font-weight:900}.sl-tx p{margin:0 0 18px;opacity:.9;max-width:440px}
+.sl-img img{width:100%;max-width:340px;aspect-ratio:1;object-fit:cover;border-radius:16px;margin-left:auto;box-shadow:0 20px 40px rgba(0,0,0,.25)}
+.sl-dots{display:flex;justify-content:center;gap:8px;margin-top:10px}.sl-dots button{width:9px;height:9px;border-radius:999px;border:0;background:#d6d2c8;padding:0;cursor:pointer;transition:width .2s}.sl-dots button[aria-current=true]{width:26px;background:var(--ink)}
+@media(max-width:640px){.slide{grid-template-columns:1fr 120px;padding:22px 18px;min-height:220px;gap:12px}.sl-tx h2{font-size:26px}.sl-tx p{font-size:13.5px;margin-bottom:12px}.sl-img img{max-width:120px}.slide .btn{padding:10px 16px;font-size:14px}}
+.sl-img img{height:auto}
+@media(min-width:861px){.gtile{aspect-ratio:auto;height:380px}}
