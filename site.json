@@ -1,11 +1,11 @@
 {
-  "storeName": "Thrifty.pk",
+  "storeName": "ABCThrift",
   "tagline": "Hand-picked pre-loved international brands at prices that make sense. Cash on delivery all over Pakistan.",
-  "handle": "@thrifty.pk",
+  "handle": "",
   "whatsapp": "0311 4139007",
   "email": "",
   "city": "Sahiwal, Punjab",
-  "houseLabel": "Thrifty Select",
+  "houseLabel": "ABC Select",
   "siteUrl": "https://abcthrift.store",
   "domain": "abcthrift.store",
   "social": {
@@ -13,15 +13,37 @@
     "facebook": "",
     "tiktok": ""
   },
-  "delivery": {"fee": 250, "freeOver": 3500, "days": "3-5 working days all over Pakistan, 1-2 days in Sahiwal"},
-  "returns": {"days": 3},
+  "delivery": {
+    "fee": 250,
+    "freeOver": 3500,
+    "days": "3-5 working days all over Pakistan, 1-2 days in Sahiwal"
+  },
+  "returns": {
+    "days": 3
+  },
   "announcements": [
     "Cash on delivery all over Pakistan",
     "Free delivery on orders over Rs 3,500",
     "New winter drop: jackets, hoodies and sweaters",
     "Every piece washed, pressed and hand-checked"
   ],
-  "deal": {"extraPct": 10},
-  "bundle": [{"min": 2, "off": 200}, {"min": 3, "pct": 10}],
-  "voucher": {"code": "THRIFTY200", "amount": 200, "minOrder": 2000}
+  "deal": {
+    "extraPct": 10
+  },
+  "bundle": [
+    {
+      "min": 2,
+      "off": 200
+    },
+    {
+      "min": 3,
+      "pct": 10
+    }
+  ],
+  "voucher": {
+    "code": "ABC200",
+    "amount": 200,
+    "minOrder": 2000
+  },
+  "logoAccent": "Thrift"
 }
