@@ -15,7 +15,8 @@
  *   Items   one row per item that got an offer. "reserve" is your hidden lowest price
  *           (default 75% of the listed price); set "state" to "sold" when it sells elsewhere.
  */
-const SITE = "https://abcthrift.store";
+const SITE = "https://qari1990.github.io/Sahiwalthrift";  // change to https://abcthrift.store when the domain is back
+const SITES = [SITE, "https://abcthrift.store", "https://qari1990.github.io/Sahiwalthrift"];
 const STORE = "ABCThrift";
 const WHATSAPP = "923114139007";
 const MIN_PCT = 0.6;       // offers below 60% of the price are refused
@@ -47,8 +48,9 @@ function doGet(e) { return handle(e.parameter || {}); }
 function doPost(e) { let b = {}; try { b = JSON.parse(e.postData.contents); } catch (x) {} return handle(b); }
 
 function handle(p) {
-  const lock = LockService.getScriptLock(); lock.waitLock(10000);
+  const lock = LockService.getScriptLock();
   try {
+    lock.waitLock(10000);
     closeExpired();
     const out = ({ state: () => state(p.sku), all: allStates, offer: () => makeOffer(p), mine: () => mine(p.sku, p.phone), accept: () => acceptCounter(p.sku, p.phone), order: () => placeOrder(p), track: () => track(p.no, p.phone), subscribe: () => subscribe(p) }[p.a] || (() => ({ error: "unknown action" })))();
     return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
@@ -74,7 +76,8 @@ const ms = (d) => (d instanceof Date ? d.getTime() : d ? new Date(d).getTime() :
 function catalog() {
   const c = CacheService.getScriptCache(); const hit = c.get("catalog");
   if (hit) return JSON.parse(hit);
-  const list = JSON.parse(UrlFetchApp.fetch(SITE + "/items.json", { muteHttpExceptions: true }).getContentText() || "[]");
+  let list = [];
+  for (const s of SITES) { try { const r = UrlFetchApp.fetch(s + "/items.json", { muteHttpExceptions: true }); if (r.getResponseCode() === 200) { list = JSON.parse(r.getContentText()); break; } } catch (e) {} }
   const map = {}; list.forEach((i) => (map[i.sku] = i));
   c.put("catalog", JSON.stringify(map), 600);
   return map;
@@ -92,7 +95,7 @@ function itemRow(sku, create) {
 
 /* ---------- public state ---------- */
 function state(sku) {
-  const c = catalog()[sku]; if (!c) return { error: "Item nahi mila" };
+  const c = catalog()[sku]; if (!c) return { error: "Item not found" };
   const it = itemRow(sku, false);
   const live = offers().filter((o) => o.sku === sku && ["new", "countered", "won"].includes(o.status));
   const top = live.reduce((m, o) => Math.max(m, +o.amount || 0), 0);
@@ -109,22 +112,22 @@ function allStates() {
 
 /* ---------- actions ---------- */
 function makeOffer(p) {
-  const c = catalog()[p.sku]; if (!c) return { error: "Item nahi mila" };
+  const c = catalog()[p.sku]; if (!c) return { error: "Item not found" };
   const name = String(p.name || "").trim().slice(0, 40), phone = cleanPhone(p.phone), amount = Math.round(+p.amount || 0);
-  if (!name) return { error: "Apna naam likhein" };
+  if (!name) return { error: "Please enter your name" };
   if (!phone) return { error: "Sahi WhatsApp number likhein (03xx xxxxxxx)" };
   const s = state(p.sku);
-  if (s.state !== "open") return { error: s.state === "sold" ? "Ye item bik chuka hai" : "Is item par offers band ho chuki hain" };
-  if (amount >= c.price) return { error: "Ye poori price hai. Seedha 'Buy now' dabayein, item aap ka." };
-  if (amount < s.minOffer) return { error: `Kam se kam offer ${s.minOffer} hai` };
-  if (s.highest && amount < s.highest + STEP) return { error: `Abhi sab se oonchi offer ${s.highest} hai. Kam se kam ${s.highest + STEP} offer karein.` };
+  if (s.state !== "open") return { error: s.state === "sold" ? "This item has been sold" : "Offers are closed for this item" };
+  if (amount >= c.price) return { error: "That's the full price. Just tap 'Buy now' and it's yours." };
+  if (amount < s.minOffer) return { error: `The minimum offer is Rs ${s.minOffer}` };
+  if (s.highest && amount < s.highest + STEP) return { error: `The highest offer is Rs ${s.highest}. Please offer at least Rs ${s.highest + STEP}.` };
   const mineOld = offers().filter((o) => o.sku === p.sku && o.phone == phone && ["new", "countered"].includes(o.status));
   mineOld.forEach((o) => { o.status = "replaced"; put("Offers", OFFER_COLS, o); });
   const it = itemRow(p.sku, true); const now = new Date();
   if (!it.firstAt) { it.firstAt = now; it.endsAt = new Date(now.getTime() + WINDOW_H * 3600e3); put("Items", ITEM_COLS, it); }
   add("Offers", OFFER_COLS, { at: now, sku: p.sku, name, phone, amount, status: "new" });
   notify(`Nayi offer: ${c.title} (${p.sku})`, `${name} (${phone}) ne Rs ${amount} offer kiye. Listed price Rs ${c.price}.\nCounter dene ke liye Offers sheet mein "counter" column mein amount likhein.\nWhatsApp: https://wa.me/92${phone.slice(1)}`);
-  return Object.assign(state(p.sku), { ok: true, message: `Offer mil gayi: Rs ${amount}. ${WINDOW_H} ghante ke andar sab se oonchi offer ko item milta hai, agar koi poori price par na le le.` });
+  return Object.assign(state(p.sku), { ok: true, message: `Offer received: Rs ${amount}. The highest offer after ${WINDOW_H} hours wins the item, unless someone buys it at full price first.` });
 }
 
 function mine(sku, phone) {
@@ -139,8 +142,8 @@ function mine(sku, phone) {
 function acceptCounter(sku, phone) {
   phone = cleanPhone(phone);
   const o = offers().filter((x) => x.sku === sku && x.phone == phone && x.status === "countered").pop();
-  if (!o || ms(o.counterAt) + COUNTER_H * 3600e3 < Date.now()) return { error: "Counter offer khatam ho chuki hai" };
-  if (state(sku).state !== "open") return { error: "Ye item ab available nahi" };
+  if (!o || ms(o.counterAt) + COUNTER_H * 3600e3 < Date.now()) return { error: "This counter offer has expired" };
+  if (state(sku).state !== "open") return { error: "This item is no longer available" };
   o.amount = +o.counter; o.status = "won"; put("Offers", OFFER_COLS, o);
   win(sku, o);
   return { ok: true, status: "won", amount: o.amount };
@@ -173,7 +176,7 @@ function onSheetEdit(e) {
   const sh = e.range.getSheet(); if (sh.getName() !== "Offers" || e.range.getRow() < 2) return;
   const col = OFFER_COLS[e.range.getColumn() - 1]; const o = rows("Offers", OFFER_COLS).find((x) => x._row === e.range.getRow()); if (!o) return;
   if (col === "counter" && +o.counter > 0) { o.status = "countered"; o.counterAt = new Date(); put("Offers", OFFER_COLS, o);
-    o.note = `https://wa.me/92${String(o.phone).slice(1)}?text=` + encodeURIComponent(`Assalam o alaikum ${o.name}! ${o.sku} ke liye aap ki offer Rs ${o.amount} ke jawab mein hamari counter offer Rs ${o.counter} hai, ${COUNTER_H} ghante ke liye. Accept karne ke liye: ${SITE}/p/${o.sku}.html`); put("Offers", OFFER_COLS, o); }
+    o.note = `https://wa.me/92${String(o.phone).slice(1)}?text=` + encodeURIComponent(`Hi ${o.name}! Thanks for your offer of Rs ${o.amount} on ${o.sku}. Our counter offer is Rs ${o.counter}, valid for ${COUNTER_H} hours. To accept: ${SITE}/p/${o.sku}.html`); put("Offers", OFFER_COLS, o); }
   if (col === "status" && o.status === "won") win(o.sku, o);
 }
 
@@ -185,27 +188,27 @@ const validEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || "").trim
 function placeOrder(p) {
   const name = String(p.name || "").trim().slice(0, 60), phone = cleanPhone(p.phone), email = validEmail(p.email) ? String(p.email).trim() : "";
   const city = String(p.city || "").trim().slice(0, 40), address = String(p.address || "").trim().slice(0, 300), note = String(p.note || "").trim().slice(0, 140);
-  if (!name || !city || address.length < 8) return { error: "Naam, city aur poora address likhein" };
+  if (!name || !city || address.length < 8) return { error: "Please enter your name, city and full address" };
   if (!phone) return { error: "Sahi mobile number likhein (03xx xxxxxxx)" };
   const cat = catalog(), list = (p.items || []).slice(0, 20);
-  if (!list.length) return { error: "Bag khali hai" };
+  if (!list.length) return { error: "Your bag is empty" };
   const gone = list.filter((i) => !cat[i.sku] || cat[i.sku].status === "Sold" || orders().some((o) => !/cancel/i.test(o.status) && String(o.items).indexOf("[" + i.sku + "]") > -1));
-  if (gone.length) return { error: "Ye item ab available nahi: " + gone.map((i) => i.sku).join(", ") + ". Bag se hata kar dobara order karein.", gone: gone.map((i) => i.sku) };
+  if (gone.length) return { error: "Sorry, already sold: " + gone.map((i) => i.sku).join(", ") + ". We removed it from your bag; please place the order again.", gone: gone.map((i) => i.sku) };
   const d = Utilities.formatDate(new Date(), "Asia/Karachi", "yyMMdd");
   const no = "AT-" + d + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
   const lines = list.map((i) => `${i.b || ""} ${i.n || ""}${i.s ? " (size " + i.s + ")" : ""} [${i.sku}] ${rs(i.price)}`);
   const o = { at: new Date(), no, status: "New", name, phone, email, city, address, note, items: lines.join("\n"), subtotal: +p.subtotal || 0, discount: +p.discount || 0, delivery: +p.delivery || 0, total: +p.total || 0, updated: new Date() };
   add("Orders", ORDER_COLS, o);
-  const wa = `https://wa.me/92${phone.slice(1)}?text=` + encodeURIComponent(`Assalam o alaikum ${name}! ${STORE} se aap ka order ${no} (${rs(o.total)}) mil gaya hai. Confirm karne ke liye "Yes" likh dein.`);
+  const wa = `https://wa.me/92${phone.slice(1)}?text=` + encodeURIComponent(`Hi ${name}! ${STORE} here. We received your order ${no} (${rs(o.total)}). Please reply "Yes" to confirm.`);
   notify(`Naya order ${no}: ${rs(o.total)} (${city})`, `${name}\n${phone}${email ? "\n" + email : ""}\n${city}\n${address}${note ? "\nNote: " + note : ""}\n\n${o.items}\n\nSubtotal ${rs(o.subtotal)}\nDiscount -${rs(o.discount)}\nDelivery ${rs(o.delivery)}\nTotal ${rs(o.total)} (COD)\n\nCustomer ko confirm karein: ${wa}\nStatus badalne ke liye Orders sheet mein "status" column badlein.`);
-  if (email) mailCustomer(o, "Order received", `Shukriya ${name}! Aap ka order hamein mil gaya hai. Hum jald WhatsApp ya call par confirm karenge.`);
+  if (email) mailCustomer(o, "Order received", `Thank you, ${name}! We have received your order and will confirm it soon by WhatsApp or call.`);
   return { ok: true, no, total: o.total };
 }
 
 function track(no, phone) {
   no = String(no || "").trim().toUpperCase(); phone = cleanPhone(phone);
   const o = orders().find((x) => String(x.no).toUpperCase() === no);
-  if (!o || (phone && String(o.phone).replace(/\D/g, "").slice(-10) !== phone.slice(-10))) return { error: "Order nahi mila. Order number aur phone check karein." };
+  if (!o || (phone && String(o.phone).replace(/\D/g, "").slice(-10) !== phone.slice(-10))) return { error: "Order not found. Please check the order number and phone." };
   return { no: o.no, status: o.status, tracking: o.tracking, total: +o.total, items: String(o.items).split("\n").length, at: ms(o.at), updated: ms(o.updated) };
 }
 
@@ -213,14 +216,14 @@ function subscribe(p) {
   const email = validEmail(p.email) ? String(p.email).trim() : "", phone = cleanPhone(p.phone);
   if (!email && !phone) return { error: "Email ya WhatsApp number likhein" };
   add("Subscribers", SUB_COLS, { at: new Date(), email, phone });
-  return { ok: true, message: "Shukriya! Naye drops aur offers sab se pehle aap ko milenge." };
+  return { ok: true, message: "Thanks! You'll hear about new drops and offers first." };
 }
 
 const STATUS_TEXT = {
-  confirmed: "Aap ka order confirm ho gaya hai. Hum 24 ghante mein parcel dispatch kar denge.",
-  dispatched: "Aap ka parcel dispatch ho gaya hai.",
-  delivered: "Aap ka parcel deliver ho gaya. Shopping ka shukriya! Koi masla ho to 7 din ke andar WhatsApp karein.",
-  cancelled: "Aap ka order cancel kar diya gaya hai. Koi sawal ho to WhatsApp karein.",
+  confirmed: "Your order is confirmed. We will dispatch it within 24 hours.",
+  dispatched: "Your parcel is on its way.",
+  delivered: "Your parcel has been delivered. Thank you for shopping with us! If anything is wrong, message us on WhatsApp within 7 days.",
+  cancelled: "Your order has been cancelled. If you have any questions, message us on WhatsApp.",
 };
 
 function mailCustomer(o, title, msg) {
@@ -243,7 +246,7 @@ function onOrderEdit(e) {
   o.updated = new Date(); put("Orders", ORDER_COLS, o);
   const k = String(o.status).toLowerCase();
   if (col === "status" && STATUS_TEXT[k]) mailCustomer(o, "Order " + o.status, STATUS_TEXT[k]);
-  if (col === "tracking" && o.tracking) mailCustomer(o, "Tracking number", "Aap ke parcel ka tracking number neeche hai.");
+  if (col === "tracking" && o.tracking) mailCustomer(o, "Tracking number", "Here is the tracking number for your parcel.");
 }
 
 function notify(subject, body) { try { MailApp.sendEmail(Session.getEffectiveUser().getEmail(), subject, body); } catch (e) {} }
