@@ -211,7 +211,9 @@ SVG = {
 }
 
 
-def off(it): return round((1 - it["price"] / it["retailPkr"]) * 100) if it["retailPkr"] else 0
+def off(it):
+    if DEAL.get("sku") == it["sku"]: return round((1 - DEAL["price"] / it["price"]) * 100)
+    return round((1 - it["price"] / it["retailPkr"]) * 100) if it["retailPkr"] else 0
 
 
 DEAL = {}
@@ -384,7 +386,7 @@ def product_page(it, all_items, n_imgs):
 <h1 class="pname">{esc(it['name'])}</h1>
 <div class="tags"><a class="tag ok" href="../condition-guide.html">✓ {esc(it['cond'])}</a>{f'<span class="tag">Size {esc(it["size"])}</span>' if it['size'] else ''}{f'<span class="tag">{esc(it["gender"])}</span>' if it['gender'] else ''}<span class="tag">{'Sold out' if sold else 'Only 1 piece'}</span></div>
 {f'<div class="dealbar dl"><b>Deal of the Day</b><span>Extra {CFG["deal"]["extraPct"]}% off for today only · ends in <time data-countdown></time></span></div>' if deal else ''}
-<div class="pp-wrap">{price_html(it, "pp")}{f'<span class="b-off">-{off(it)}%</span>' if it['retailPkr'] else ''}</div>
+<div class="pp-wrap">{price_html(it, "pp")}{f'<span class="b-off">-{off(it)}%</span>' if off(it) else ''}</div>
 {f'<p class="save">Retail abroad ~${it["retailUsd"]}. You save {rs(save)}.</p>' if save > 0 else ''}
 {'<p class="soldmsg">Ye item bik chuka hai. Neeche milte julte items dekhein ya WhatsApp par poochein.</p>' if sold else f'<div class="cta">{buy}<button type="button" class="addbag" data-add="{bag_data(it)}">Add to bag</button></div>{ask}' + offer_box(it)}
 <ul class="perks"><li><b>Cash on delivery</b><span>Pay when the parcel arrives</span></li><li><b>Delivery</b><span>{esc(delivery_line())}</span></li><li><b>Easy exchange</b><span><a href="../returns.html">{CFG.get('returns', {}).get('days', 3)}-day exchange</a> if it doesn't match</span></li><li><b>Bundle &amp; save</b><span>{esc(bundle_line())}</span></li></ul>
