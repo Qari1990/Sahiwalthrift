@@ -18,10 +18,10 @@ var bag=L.get('bag',[]),wish=L.get('wish',[]),V=T.voucher,vc=L.get('voucher',nul
 function price(it){return deal&&deal.sku===it.sku?deal.price:it.p}
 function totals(){var sub=0,n=bag.length;bag.forEach(function(it){sub+=price(it)});var bd=0,lbl='';(T.bundle||[]).forEach(function(b){if(n>=b.min){bd=b.off?b.off:Math.round(sub*b.pct/100);lbl=n+' items bundle'}});
  var vd=vc&&V&&n&&sub-bd>=V.minOrder?V.amount:0,goods=sub-bd-vd,del=!n||!T.fee||(T.freeOver&&goods>=T.freeOver)?0:T.fee;return {sub:sub,bd:bd,lbl:lbl,vd:vd,del:del,goods:goods,total:goods+del}}
-function nextTip(){var n=bag.length,nx=(T.bundle||[]).filter(function(b){return b.min>n})[0],t=totals();if(!n)return 'Bag khali hai. Items par + dabayein.';
- if(T.fee&&T.freeOver&&t.goods<T.freeOver)return 'Sirf '+rs(T.freeOver-t.goods)+' ki aur shopping par delivery free!'+(nx?' '+(nx.min-n)+' aur item par '+(nx.off?rs(nx.off):nx.pct+'%')+' off.':'');
- if(nx)return 'Sirf '+(nx.min-n)+' aur item add karein aur '+(nx.off?rs(nx.off):nx.pct+'%')+' bachayein!';return 'Bundle discount aur free delivery laag ho gaye.'}
-function sumHtml(t){var vline=V?(vc?(t.vd?'<div><span>Voucher '+esc(V.code)+'</span><b>-'+rs(t.vd)+'</b></div>':'<div class="mut"><span>Voucher '+esc(V.code)+' ('+rs(V.minOrder)+'+ par)</span><b>-</b></div>'):'<button type="button" class="o-link" data-voucher>Free '+rs(V.amount)+' voucher claim karein</button>'):'';
+function nextTip(){var n=bag.length,nx=(T.bundle||[]).filter(function(b){return b.min>n})[0],t=totals();if(!n)return 'Your bag is empty. Tap + on an item to add it.';
+ if(T.fee&&T.freeOver&&t.goods<T.freeOver)return 'Add '+rs(T.freeOver-t.goods)+' more for free delivery!'+(nx?' Add '+(nx.min-n)+' more item(s) for '+(nx.off?rs(nx.off):nx.pct+'%')+' off.':'');
+ if(nx)return 'Add '+(nx.min-n)+' more item(s) and save '+(nx.off?rs(nx.off):nx.pct+'%')+'!';return 'Bundle discount and free delivery applied.'}
+function sumHtml(t){var vline=V?(vc?(t.vd?'<div><span>Voucher '+esc(V.code)+'</span><b>-'+rs(t.vd)+'</b></div>':'<div class="mut"><span>Voucher '+esc(V.code)+' (on '+rs(V.minOrder)+'+)</span><b>-</b></div>'):'<button type="button" class="o-link" data-voucher>Free '+rs(V.amount)+' voucher: claim it</button>'):'';
  return '<div><span>Subtotal</span><b>'+rs(t.sub)+'</b></div>'+(t.bd?'<div class="ok"><span>'+t.lbl+'</span><b>-'+rs(t.bd)+'</b></div>':'')+vline+'<div><span>Delivery</span><b>'+(t.del?rs(t.del):'Free')+'</b></div><div class="tot"><span>Total (cash on delivery)</span><b>'+rs(t.total)+'</b></div>'}
 function counts(){[$('bag-n')].concat(all('[data-bag-n]')).forEach(function(c){if(c){c.textContent=bag.length;c.hidden=!bag.length}});all('[data-wish-n]').forEach(function(c){c.textContent=wish.length;c.hidden=!wish.length})}
 function draw(){counts();
@@ -39,28 +39,28 @@ function add(it){if(!bag.some(function(x){return x.sku===it.sku})){bag.push(it);
 function orderNo(){var d=pkt(),p=function(n){return (n<10?'0':'')+n};return 'AT-'+String(d.getUTCFullYear()).slice(2)+p(d.getUTCMonth()+1)+p(d.getUTCDate())+'-'+Math.random().toString(36).slice(2,6).toUpperCase()}
 function api(body){return fetch(T.api,{method:'POST',body:JSON.stringify(body)}).then(function(r){return r.json()})}
 $('co')&&($('co').onsubmit=function(e){e.preventDefault();var f=e.target,err=$('co-err'),c={},via=(e.submitter&&e.submitter.dataset.via)||'site';['name','phone','city','address','note','email'].forEach(function(k){c[k]=f[k].value.trim()});
- var ph=c.phone.replace(/\D/g,'');if(!c.name||!c.city||c.address.length<8){err.textContent='Naam, city aur poora address likhein.';return}
- if(!/^(92|0)?3\d{9}$/.test(ph)){err.textContent='Sahi mobile number likhein (03xx xxxxxxx).';return}
- if(c.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email)){err.textContent='Email sahi likhein ya khali chhor dein.';return}
- if(!f.agree.checked){err.textContent='Terms aur return policy se ittefaq zaroori hai.';return}err.textContent='';
+ var ph=c.phone.replace(/\D/g,'');if(!c.name||!c.city||c.address.length<8){err.textContent='Please enter your name, city and full address.';return}
+ if(!/^(92|0)?3\d{9}$/.test(ph)){err.textContent='Please enter a valid mobile number (03xx xxxxxxx).';return}
+ if(c.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email)){err.textContent='Please enter a valid email or leave it blank.';return}
+ if(!f.agree.checked){err.textContent='Please accept the terms and return policy.';return}err.textContent='';
  var t=totals(),items=bag.map(function(it){return {sku:it.sku,b:it.b,n:it.n,s:it.s,price:price(it)}});
- function waMsg(no){return 'Assalam o alaikum! '+(via==='site'?'Website order':'Naya order')+' *'+no+'* ('+T.store+')\n\n'+bag.map(function(it,i){return (i+1)+'. '+it.b+' '+it.n+(it.s?' (size '+it.s+')':'')+' ['+it.sku+'] '+rs(price(it))}).join('\n')+
- '\n\nSubtotal '+rs(t.sub)+(t.bd?'\n'+t.lbl+' -'+rs(t.bd):'')+(t.vd?'\nVoucher '+V.code+' -'+rs(t.vd):'')+'\nDelivery '+(t.del?rs(t.del):'Free')+'\n*Total '+rs(t.total)+' (Cash on delivery)*\n\nNaam: '+c.name+'\nPhone: '+c.phone+'\nCity: '+c.city+'\nAddress: '+c.address+(c.note?'\nNote: '+c.note:'')}
+ function waMsg(no){return 'Hi! '+(via==='site'?'Website order':'New order')+' *'+no+'* ('+T.store+')\n\n'+bag.map(function(it,i){return (i+1)+'. '+it.b+' '+it.n+(it.s?' (size '+it.s+')':'')+' ['+it.sku+'] '+rs(price(it))}).join('\n')+
+ '\n\nSubtotal '+rs(t.sub)+(t.bd?'\n'+t.lbl+' -'+rs(t.bd):'')+(t.vd?'\nVoucher '+V.code+' -'+rs(t.vd):'')+'\nDelivery '+(t.del?rs(t.del):'Free')+'\n*Total '+rs(t.total)+' (Cash on delivery)*\n\nName: '+c.name+'\nPhone: '+c.phone+'\nCity: '+c.city+'\nAddress: '+c.address+(c.note?'\nNote: '+c.note:'')}
  function done(no,url,onSite){var o=L.get('orders',[]);o.unshift({no:no,date:today,items:bag.length,total:t.total,phone:c.phone});L.set('orders',o.slice(0,10));L.set('cust',{name:c.name,phone:c.phone,city:c.city,address:c.address,email:c.email});
-  $('co-done').innerHTML='<p class="eyebrow">Shukriya, '+esc(c.name)+'!</p><h3>Order '+esc(no)+'</h3>'+(onSite?'<p>Aap ka order hamein mil gaya hai. Hum jald WhatsApp ya call par confirm karenge'+(c.email?' aur '+esc(c.email)+' par email bhi aayegi':'')+'.</p><a class="ask" href="'+esc(url)+'" target="_blank" rel="noopener">WhatsApp par bhi bhejein (jaldi confirmation)</a>':'<p>Aap ka order WhatsApp par khul gaya hai. Wahan <b>Send</b> zaroor dabayein.</p><a class="buy" href="'+esc(url)+'" target="_blank" rel="noopener">WhatsApp dobara kholein</a>')+
-  '<p class="bag-note">Total '+rs(t.total)+', payment parcel milne par. <a href="'+root+'track.html?o='+encodeURIComponent(no)+'">Track order</a></p>';
+  $('co-done').innerHTML='<p class="eyebrow">Thank you, '+esc(c.name)+'!</p><h3>Order '+esc(no)+'</h3>'+(onSite?'<p>We have received your order and will confirm it soon by WhatsApp or call'+(c.email?'. A confirmation email is on its way to '+esc(c.email):'')+'.</p><a class="ask" href="'+esc(url)+'" target="_blank" rel="noopener">Also send on WhatsApp (faster confirmation)</a>':'<p>Your order has opened in WhatsApp. Please tap <b>Send</b> there to complete it.</p><a class="buy" href="'+esc(url)+'" target="_blank" rel="noopener">Open WhatsApp again</a>')+
+  '<p class="bag-note">Total '+rs(t.total)+', pay when the parcel arrives. <a href="'+root+'track.html?o='+encodeURIComponent(no)+'">Track order</a></p>';
   bag=[];L.set('bag',bag);if(vc&&t.vd){vc=null;L.set('voucher',null);L.set('pop',1)}show('done');draw()}
  function viaWa(){var no=orderNo(),url='https://wa.me/'+T.wa+'?text='+encodeURIComponent(waMsg(no));if(!window.open(url,'_blank'))location.href=url;done(no,url,false)}
  if(via==='wa'||!T.api)return viaWa();
- var btn=e.submitter;btn.disabled=true;btn.textContent='Order lag raha hai...';
+ var btn=e.submitter;btn.disabled=true;btn.textContent='Placing order...';
  api({a:'order',name:c.name,phone:c.phone,email:c.email,city:c.city,address:c.address,note:c.note,items:items,subtotal:t.sub,discount:t.bd+t.vd,delivery:t.del,total:t.total}).then(function(r){btn.disabled=false;btn.textContent='Place order · Cash on delivery';
   if(r.error){err.textContent=r.error;if(r.gone){bag=bag.filter(function(x){return r.gone.indexOf(x.sku)<0});L.set('bag',bag);draw()}return}
-  done(r.no,'https://wa.me/'+T.wa+'?text='+encodeURIComponent(waMsg(r.no)),true)}).catch(function(){btn.disabled=false;btn.textContent='Place order · Cash on delivery';err.textContent='Network masla. Dobara try karein ya "Order on WhatsApp" dabayein.'})});
-var nf=$('news');nf&&(nf.onsubmit=function(e){e.preventDefault();var m=$('news-msg'),em=nf.email.value.trim();if(!T.api){location.href='https://wa.me/'+T.wa+'?text='+encodeURIComponent('Mujhe naye drops ki khabar dein. Email: '+em);return}
- m.className='o-msg ok';m.textContent='...';api({a:'subscribe',email:em}).then(function(r){m.className='o-msg '+(r.error?'err':'ok');m.textContent=r.error||r.message;if(!r.error)nf.reset()}).catch(function(){m.textContent='Network masla, dobara try karein'})});
-document.addEventListener('click',function(e){var a=e.target.closest('[data-add]');if(a){e.preventDefault();var it=JSON.parse(a.dataset.add),had=bag.some(function(x){return x.sku===it.sku});add(it);draw();if(!had&&a.classList.contains('cadd'))toast('Bag mein add ho gaya · '+nextTip());else open_();return}
+  done(r.no,'https://wa.me/'+T.wa+'?text='+encodeURIComponent(waMsg(r.no)),true)}).catch(function(){btn.disabled=false;btn.textContent='Place order · Cash on delivery';err.textContent='We could not reach our order system, so your order is opening in WhatsApp instead.';viaWa()})});
+var nf=$('news');nf&&(nf.onsubmit=function(e){e.preventDefault();var m=$('news-msg'),em=nf.email.value.trim();if(!T.api){location.href='https://wa.me/'+T.wa+'?text='+encodeURIComponent('Please tell me about new drops. Email: '+em);return}
+ m.className='o-msg ok';m.textContent='...';api({a:'subscribe',email:em}).then(function(r){m.className='o-msg '+(r.error?'err':'ok');m.textContent=r.error||r.message;if(!r.error)nf.reset()}).catch(function(){m.textContent='Connection problem. Please try again.'})});
+document.addEventListener('click',function(e){var a=e.target.closest('[data-add]');if(a){e.preventDefault();var it=JSON.parse(a.dataset.add),had=bag.some(function(x){return x.sku===it.sku});add(it);draw();if(!had&&a.classList.contains('cadd'))toast('Added to bag · '+nextTip());else open_();return}
  var bu=e.target.closest('[data-buy]');if(bu){add(JSON.parse(bu.dataset.buy));open_('co');return}
- var wi=e.target.closest('[data-wish]');if(wi){e.preventDefault();var w=JSON.parse(wi.dataset.wish),j=wish.findIndex(function(x){return x.sku===w.sku});if(j<0){wish.unshift(w);toast('Wishlist mein save ho gaya')}else{wish.splice(j,1);if(wi.closest('#wl'))wi.closest('.card').remove()}L.set('wish',wish);draw();return}
+ var wi=e.target.closest('[data-wish]');if(wi){e.preventDefault();var w=JSON.parse(wi.dataset.wish),j=wish.findIndex(function(x){return x.sku===w.sku});if(j<0){wish.unshift(w);toast('Saved to wishlist')}else{wish.splice(j,1);if(wi.closest('#wl'))wi.closest('.card').remove()}L.set('wish',wish);draw();return}
  if(e.target.closest('[data-bag-open]'))return open_();
  if(e.target.id==='bag-go')return show('co');
  if(e.target.closest('[data-co-back]'))return show('cart');
@@ -75,8 +75,8 @@ function toast(t){var d=document.createElement('div');d.className='toast';d.text
 
 // voucher
 function pop(force){if(!V)return;var p=$('pop');if(!p)return;if(!force&&(vc||L.get('pop',0)))return;
- $('pop-h').textContent=vc?'Aap ka voucher tayyar hai':'Free '+rs(V.amount)+' voucher';$('pop-p').textContent='Pehle order par '+rs(V.amount)+' off, '+rs(V.minOrder)+' ya zyada ke order par. Bag mein khud lag jayega.';
- var code=$('pop-code'),go=$('pop-go');function shw(){code.hidden=false;code.textContent=V.code;go.textContent='Shopping shuru karein';go.onclick=function(){p.hidden=true}}
+ $('pop-h').textContent=vc?'Your voucher is ready':'Free '+rs(V.amount)+' voucher';$('pop-p').textContent=rs(V.amount)+' off your first order of '+rs(V.minOrder)+' or more. Applied automatically in your bag.';
+ var code=$('pop-code'),go=$('pop-go');function shw(){code.hidden=false;code.textContent=V.code;go.textContent='Start shopping';go.onclick=function(){p.hidden=true}}
  if(vc)shw();else go.onclick=function(){vc=V.code;L.set('voucher',vc);shw();draw()};p.hidden=false}
 if(V&&!vc&&!L.get('pop',0))setTimeout(function(){if($('bag').hidden&&$('menu').hidden)pop()},9000);
 
