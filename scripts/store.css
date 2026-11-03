@@ -170,3 +170,5 @@ html,body{overflow-x:clip}
 .gtiles[style*="--n:1"] .gtile{aspect-ratio:auto;height:340px;width:100%}.gtiles[style*="--n:1"] .gtile img{object-position:center 35%}
 @media(max-width:700px){.gtiles[style*="--n:1"] .gtile{height:240px}}
 @media(max-width:700px){.sl-tx h2{overflow-wrap:anywhere}}
+/* v6 original photos: show the whole photo, never crop */
+.ci img,.gal-main img,.deal-img img{aspect-ratio:4/5;object-fit:contain;background:#f4f2ee}

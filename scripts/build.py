@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageOps
 
 ROOT = Path(__file__).resolve().parent.parent
 CFG = json.loads((ROOT / "site.json").read_text())
@@ -109,6 +109,13 @@ def _issues(src):
     elif g.mean() > 215: out.append("bohat zyada roshni, rang ud gaye")
     if min(im.size) < 350: out.append("bohat chhoti / zoom ki hui")
     return out
+
+
+def original(src: Path, size=1200) -> Image.Image:
+    """The photo exactly as edited in Landa Lister: own background, no crop, just resized for the web."""
+    im = ImageOps.exif_transpose(Image.open(src)).convert("RGB")
+    im.thumbnail((size, size), Image.LANCZOS)
+    return im
 
 
 def cutout(src: Path) -> Image.Image:
@@ -649,9 +656,9 @@ def main(items_dir, assets_dir):
         for aid in it["images"]:
             src = Path(assets_dir) / f"{aid}.jpg"
             if not src.exists() and not (CACHE / f"{aid}.png").exists(): continue
-            try: cut = cutout(src)
-            except Exception as e: print("cutout failed", aid, e); continue
-            n += 1; studio(cut, backdrop(cut)).save(tmp / "img" / f"{it['sku']}-{n}.jpg", quality=86, optimize=True, progressive=True)
+            try: cut = original(src)
+            except Exception as e: print("photo failed", aid, e); continue
+            n += 1; cut.save(tmp / "img" / f"{it['sku']}-{n}.jpg", quality=86, optimize=True, progressive=True)
             issues += photo_issues(src, cut, n)
         if n < 3: issues.append(f"Sirf {n} photo. Kam az kam 4 lein: front, back, brand/size tag, aur close-up (fabric ya logo)")
         counts[it["sku"]] = n; it["n_imgs"] = n
