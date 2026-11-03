@@ -44,7 +44,7 @@ function setup() {
 }
 
 /* ---------- web endpoints ---------- */
-function doGet(e) { return handle(e.parameter || {}); }
+function doGet(e) { const q = (e && e.parameter) || {}; if (q.p) { try { return handle(JSON.parse(q.p)); } catch (x) {} } return handle(q); }
 function doPost(e) { let b = {}; try { b = JSON.parse(e.postData.contents); } catch (x) {} return handle(b); }
 
 function handle(p) {
@@ -115,7 +115,7 @@ function makeOffer(p) {
   const c = catalog()[p.sku]; if (!c) return { error: "Item not found" };
   const name = String(p.name || "").trim().slice(0, 40), phone = cleanPhone(p.phone), amount = Math.round(+p.amount || 0);
   if (!name) return { error: "Please enter your name" };
-  if (!phone) return { error: "Sahi WhatsApp number likhein (03xx xxxxxxx)" };
+  if (!phone) return { error: "Please enter a valid WhatsApp number (03xx xxxxxxx)" };
   const s = state(p.sku);
   if (s.state !== "open") return { error: s.state === "sold" ? "This item has been sold" : "Offers are closed for this item" };
   if (amount >= c.price) return { error: "That's the full price. Just tap 'Buy now' and it's yours." };
@@ -131,7 +131,7 @@ function makeOffer(p) {
 }
 
 function mine(sku, phone) {
-  phone = cleanPhone(phone); if (!phone) return { error: "Sahi WhatsApp number likhein" };
+  phone = cleanPhone(phone); if (!phone) return { error: "Please enter a valid WhatsApp number" };
   const o = offers().filter((x) => x.sku === sku && x.phone == phone && x.status !== "replaced").pop();
   if (!o) return { none: true };
   const counterLive = o.status === "countered" && ms(o.counterAt) + COUNTER_H * 3600e3 > Date.now();
@@ -189,7 +189,7 @@ function placeOrder(p) {
   const name = String(p.name || "").trim().slice(0, 60), phone = cleanPhone(p.phone), email = validEmail(p.email) ? String(p.email).trim() : "";
   const city = String(p.city || "").trim().slice(0, 40), address = String(p.address || "").trim().slice(0, 300), note = String(p.note || "").trim().slice(0, 140);
   if (!name || !city || address.length < 8) return { error: "Please enter your name, city and full address" };
-  if (!phone) return { error: "Sahi mobile number likhein (03xx xxxxxxx)" };
+  if (!phone) return { error: "Please enter a valid mobile number (03xx xxxxxxx)" };
   const cat = catalog(), list = (p.items || []).slice(0, 20);
   if (!list.length) return { error: "Your bag is empty" };
   const gone = list.filter((i) => !cat[i.sku] || cat[i.sku].status === "Sold" || orders().some((o) => !/cancel/i.test(o.status) && String(o.items).indexOf("[" + i.sku + "]") > -1));
@@ -214,7 +214,7 @@ function track(no, phone) {
 
 function subscribe(p) {
   const email = validEmail(p.email) ? String(p.email).trim() : "", phone = cleanPhone(p.phone);
-  if (!email && !phone) return { error: "Email ya WhatsApp number likhein" };
+  if (!email && !phone) return { error: "Please enter your email or WhatsApp number" };
   add("Subscribers", SUB_COLS, { at: new Date(), email, phone });
   return { ok: true, message: "Thanks! You'll hear about new drops and offers first." };
 }
