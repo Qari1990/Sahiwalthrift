@@ -267,7 +267,7 @@ def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra=""
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{esc(title)}</title><meta name="description" content="{esc(desc[:160])}"><link rel="canonical" href="{esc(base + '/' + canonical)}">
 <meta property="og:type" content="website"><meta property="og:site_name" content="{esc(CFG['storeName'])}"><meta property="og:title" content="{esc(title)}"><meta property="og:description" content="{esc(desc[:200])}">
-<meta property="og:url" content="{esc(base + '/' + canonical)}">{f'<meta property="og:image" content="{esc(base + "/" + image)}"><meta name="twitter:card" content="summary_large_image">' if image else ''}<meta name="theme-color" content="#15201d">
+<meta property="og:url" content="{esc(base + '/' + canonical)}"><meta property="og:locale" content="en_PK"><meta property="og:image" content="{esc(base + "/" + (image or "og-image.png"))}"><meta name="twitter:card" content="summary_large_image"><meta name="theme-color" content="#15201d">{f'<meta name="google-site-verification" content="{esc(CFG["googleVerification"])}">' if CFG.get("googleVerification") else ''}
 <link rel="icon" href="{up}favicon.svg"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"><style>{CSS}</style>{ld_tags}
 <script>window.TP={json.dumps(tp).replace("</", "<\\/")};</script></head><body>
@@ -366,7 +366,24 @@ def product_ld(it, n_imgs):
             "image": [f"{base}/img/{it['sku']}-{i}.jpg" for i in range(1, n_imgs + 1)], "description": it["desc"] or it["title"],
             "brand": {"@type": "Brand", "name": it["brand"]}, "itemCondition": "https://schema.org/UsedCondition",
             "offers": {"@type": "Offer", "price": it["price"], "priceCurrency": "PKR", "url": f"{base}/p/{it['sku']}.html",
-                       "availability": "https://schema.org/SoldOut" if it["status"] == "Sold" else "https://schema.org/InStock"}}
+                       "availability": "https://schema.org/SoldOut" if it["status"] == "Sold" else "https://schema.org/InStock",
+                       "itemCondition": "https://schema.org/UsedCondition", "seller": {"@type": "Organization", "name": CFG["storeName"]},
+                       "shippingDetails": shipping_ld(it["price"]), "hasMerchantReturnPolicy": return_ld()}}
+
+
+def shipping_ld(price):
+    d = CFG.get("delivery") or {}
+    fee = 0 if d.get("freeOver") and price >= d["freeOver"] else d.get("fee", 0)
+    return {"@type": "OfferShippingDetails", "shippingRate": {"@type": "MonetaryAmount", "value": fee, "currency": "PKR"},
+            "shippingDestination": {"@type": "DefinedRegion", "addressCountry": "PK"},
+            "deliveryTime": {"@type": "ShippingDeliveryTime", "handlingTime": {"@type": "QuantitativeValue", "minValue": 0, "maxValue": 1, "unitCode": "DAY"},
+                             "transitTime": {"@type": "QuantitativeValue", "minValue": 1, "maxValue": 5, "unitCode": "DAY"}}}
+
+
+def return_ld():
+    return {"@type": "MerchantReturnPolicy", "applicableCountry": "PK", "returnPolicyCategory": "https://schema.org/MerchantReturnFiniteReturnWindow",
+            "merchantReturnDays": CFG.get("returns", {}).get("days", 7), "returnMethod": "https://schema.org/ReturnByMail",
+            "returnFees": "https://schema.org/ReturnShippingFees", "merchantReturnLink": CFG["siteUrl"].rstrip("/") + "/returns.html"}
 
 
 def product_page(it, all_items, n_imgs):
@@ -535,8 +552,14 @@ function fromUrl(){var p=new URLSearchParams(location.search);setG(['Men','Women
 fromUrl();window.addEventListener('popstate',fromUrl);
 document.addEventListener('click',function(e){var a=e.target.closest('a[href*="#shop"]');if(!a||a.pathname!==location.pathname)return;e.preventDefault();history.pushState(null,'',a.href);fromUrl();var m=$('menu');if(m&&!m.hidden){m.hidden=true;document.body.classList.remove('noscroll')}$('shop').scrollIntoView({behavior:'smooth'})})})()</script>"""
     org = {"@context": "https://schema.org", "@type": "ClothingStore", "name": CFG["storeName"], "url": CFG["siteUrl"].rstrip("/") + "/", "telephone": "+" + wa_digits(),
-           "address": {"@type": "PostalAddress", "addressLocality": "Sahiwal", "addressRegion": "Punjab", "addressCountry": "PK"}, "paymentAccepted": "Cash on delivery", "currenciesAccepted": "PKR"}
-    return page(f"{CFG['storeName']} | Pre-loved international brands in Pakistan, cash on delivery", CFG["tagline"], body, 0, f"img/{live[0]['sku']}-1.jpg" if live and live[0]["images"] else None, "", None, js + SLIDER_JS + index_badges_js(), [org])
+           "address": {"@type": "PostalAddress", "addressLocality": "Sahiwal", "addressRegion": "Punjab", "addressCountry": "PK"}, "paymentAccepted": "Cash on delivery", "currenciesAccepted": "PKR",
+           "logo": CFG["siteUrl"].rstrip("/") + "/logo.png", "image": CFG["siteUrl"].rstrip("/") + "/og-image.png", "priceRange": "Rs 500 - Rs 5,000",
+           "areaServed": {"@type": "Country", "name": "Pakistan"}}
+    sm = [u for u in (CFG.get("social") or {}).values() if u]
+    if sm: org["sameAs"] = sm
+    site = {"@context": "https://schema.org", "@type": "WebSite", "name": CFG["storeName"], "url": CFG["siteUrl"].rstrip("/") + "/",
+            "potentialAction": {"@type": "SearchAction", "target": CFG["siteUrl"].rstrip("/") + "/index.html?q={search_term_string}#shop", "query-input": "required name=search_term_string"}}
+    return page(f"{CFG['storeName']} | Thrift store for pre-loved international brands in Pakistan", CFG["tagline"], body, 0, f"img/{live[0]['sku']}-1.jpg" if live and live[0]["images"] else None, "", None, js + SLIDER_JS + index_badges_js(), [org, site])
 
 
 # ---------- info pages ----------
@@ -647,6 +670,15 @@ g.innerHTML=w.map(function(it){return '<article class="card"><a class="cl" href=
 FAQ = []
 
 
+def sitemap(base, rows):
+    """rows: (path, lastmod YYYY-MM-DD or '', [image urls])"""
+    out = ['<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">']
+    for path, mod, imgs in rows:
+        out.append(f"<url><loc>{esc(base)}/{esc(path)}</loc>" + (f"<lastmod>{mod}</lastmod>" if re.fullmatch(r"\d{4}-\d{2}-\d{2}", mod or "") else "")
+                   + "".join(f"<image:image><image:loc>{esc(u)}</image:loc></image:image>" for u in imgs) + "</url>")
+    return "\n".join(out + ["</urlset>"]) + "\n"
+
+
 def main(items_dir, assets_dir):
     items = load_items(items_dir)
     tmp = ROOT / "public.new"; shutil.rmtree(tmp, ignore_errors=True); (tmp / "img").mkdir(parents=True); (tmp / "p").mkdir()
@@ -686,10 +718,14 @@ def main(items_dir, assets_dir):
     (tmp / "photo-report.json").write_text(json.dumps(report, ensure_ascii=False, indent=1))
     (tmp / "items.json").write_text(json.dumps([{"sku": i["sku"], "title": i["title"], "price": i["price"], "status": i["status"]} for i in items]))
     shutil.copy(Path(__file__).parent / "favicon.svg", tmp / "favicon.svg")
+    promo = Path(__file__).parent.parent / "promo"  # social media campaign images, served at /promo/ so Metricool can fetch them
+    if promo.is_dir(): shutil.copytree(promo, tmp / "promo")
     (tmp / "404.html").write_text(page(f"Not found | {CFG['storeName']}", CFG["tagline"], '<section class="nf"><h1>This page or item is no longer available</h1><p>Take a look at our other items.</p><a class="btn" href="' + esc(CFG['siteUrl']) + '/">Visit the store</a></section>'))
     base = CFG["siteUrl"].rstrip("/")
-    pages = [""] + [f"{s}.html" for s, _ in INFO] + [f"p/{i['sku']}.html" for i in items]
-    (tmp / "sitemap.xml").write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + "".join(f"<url><loc>{base}/{p}</loc></url>" for p in pages) + "</urlset>")
+    (tmp / "sitemap.xml").write_text(sitemap(base, [("", day.strftime("%Y-%m-%d"), [])] + [(f"{s}.html", "", []) for s, _ in INFO] +
+        [(f"p/{i['sku']}.html", str(i["created"])[:10], [f"{base}/img/{i['sku']}-{n}.jpg" for n in range(1, counts[i["sku"]] + 1)]) for i in items]))
+    for f in ("logo.png", "og-image.png"):
+        if (Path(__file__).parent / f).exists(): shutil.copy(Path(__file__).parent / f, tmp / f)
     (tmp / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: {base}/sitemap.xml\n")
     if CFG.get("domain"): (tmp / "CNAME").write_text(CFG["domain"] + "\n")
     (tmp / ".nojekyll").write_text("")
