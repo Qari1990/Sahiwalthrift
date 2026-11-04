@@ -718,6 +718,8 @@ def main(items_dir, assets_dir):
     (tmp / "photo-report.json").write_text(json.dumps(report, ensure_ascii=False, indent=1))
     (tmp / "items.json").write_text(json.dumps([{"sku": i["sku"], "title": i["title"], "price": i["price"], "status": i["status"]} for i in items]))
     shutil.copy(Path(__file__).parent / "favicon.svg", tmp / "favicon.svg")
+    promo = Path(__file__).parent.parent / "promo"  # social media campaign images, served at /promo/ so Metricool can fetch them
+    if promo.is_dir(): shutil.copytree(promo, tmp / "promo")
     (tmp / "404.html").write_text(page(f"Not found | {CFG['storeName']}", CFG["tagline"], '<section class="nf"><h1>This page or item is no longer available</h1><p>Take a look at our other items.</p><a class="btn" href="' + esc(CFG['siteUrl']) + '/">Visit the store</a></section>'))
     base = CFG["siteUrl"].rstrip("/")
     (tmp / "sitemap.xml").write_text(sitemap(base, [("", day.strftime("%Y-%m-%d"), [])] + [(f"{s}.html", "", []) for s, _ in INFO] +
