@@ -1,3 +1,3 @@
 User-agent: *
 Allow: /
-Sitemap: https://qari1990.github.io/Sahiwalthrift/sitemap.xml
+Sitemap: https://abcthrift.store/sitemap.xml
