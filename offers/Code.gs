@@ -15,7 +15,7 @@
  *   Items   one row per item that got an offer. "reserve" is your hidden lowest price
  *           (default 75% of the listed price); set "state" to "sold" when it sells elsewhere.
  */
-const SITE = "https://qari1990.github.io/Sahiwalthrift";  // change to https://abcthrift.store when the domain is back
+const SITE = "https://abcthrift.store";
 const SITES = [SITE, "https://abcthrift.store", "https://qari1990.github.io/Sahiwalthrift"];
 const STORE = "ABCThrift";
 const WHATSAPP = "923114139007";
