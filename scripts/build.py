@@ -696,7 +696,7 @@ def main(items_dir, assets_dir):
             try: cut = original(src)
             except Exception as e: print("photo failed", aid, e); continue
             n += 1
-            if it["kinds"].get(aid) in AI_KINDS: it["ai_idx"].add(n)  # AI-made photo (CapCut studio / street style): labelled on the site
+            if it["kinds"].get(aid) == "street": it["ai_idx"].add(n)  # street-style should never reach the site; label it if it does. Studio photos carry no label (WAQAR, 9 Nov)
             cut.save(tmp / "img" / f"{it['sku']}-{n}.jpg", quality=86, optimize=True, progressive=True)
             issues += photo_issues(src, cut, n)
         if n < 3: issues.append(f"Sirf {n} photo. Kam az kam 4 lein: front, back, brand/size tag, aur close-up (fabric ya logo)")
