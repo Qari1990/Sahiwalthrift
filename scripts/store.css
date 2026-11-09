@@ -172,3 +172,5 @@ html,body{overflow-x:clip}
 @media(max-width:700px){.sl-tx h2{overflow-wrap:anywhere}}
 /* v6 original photos: show the whole photo, never crop */
 .ci img,.gal-main img,.deal-img img{aspect-ratio:4/5;object-fit:contain;background:#f4f2ee}
+.ci .b-ai{position:absolute;top:44px;left:10px;background:rgba(21,32,29,.82);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;letter-spacing:.02em}
+.gal-main .gai{flex:0 0 100%;position:relative;margin:0;scroll-snap-align:start}.gal-main .gai img{width:100%}.gai .b-ai{position:absolute;top:12px;left:12px;background:rgba(21,32,29,.82);color:#fff;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}

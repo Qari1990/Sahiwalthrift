@@ -199,7 +199,7 @@ def load_items(items_dir):
             "brand": brand, "name": clean_name(c.get("title") or "", brand, d.get("size") or "", d.get("category") or "Clothing"),
             "origin": ((d.get("ai") or {}).get("identified") or {}).get("brand_origin") or "", "hl": highlights(d), "category": d.get("category") or "Clothing", "gender": d.get("gender") or "", "size": d.get("size") or "",
             "color": d.get("color") or "", "cond": cond_label(d), "fix": fix_note(d), "desc": positive(c.get("description_en")),
-            "specs": specs, "meas": meas, "images": d.get("images") or [], "created": d.get("createdAt") or "",
+            "specs": specs, "meas": meas, "images": d.get("images") or [], "kinds": d.get("photoKind") or {}, "created": d.get("createdAt") or "",
         })
     return sorted(items, key=lambda i: i["created"], reverse=True)
 
@@ -323,13 +323,16 @@ def price_html(it, cls="cp"):
     return reg + f'<span class="{cls} dl"><b>{rs(DEAL["price"])}</b><s>{rs(it["price"])}</s></span>'
 
 
+AI_KINDS = ("studio", "street")
+AI_BADGE = '<span class="b-ai" title="AI-made preview of this exact item. See the real photos on the product page.">AI preview</span>'
+
 def card(it, up=""):
     img = f'{up}img/{it["sku"]}-1.jpg' if it["images"] else ""
     img2 = f'{up}img/{it["sku"]}-2.jpg' if it.get("n_imgs", 0) > 1 else ""
     sold = it["status"] == "Sold"
     badge = '<span class="b-sold">Sold out</span>' if sold else (f'<span class="b-off">-{off(it)}%</span>' if off(it) else '<span class="b-new">Just in</span>' if it.get("fresh") else '')
     return f"""<article class="card{' is-sold' if sold else ''}" data-sku="{esc(it['sku'])}" data-cat="{esc(it['category'])}" data-g="{esc(it['gender'])}" data-size="{esc(it['size'])}" data-brand="{esc(it['brand'])}" data-cond="{esc(it['cond'])}" data-price="{it['price']}" data-off="{off(it)}" data-new="{esc(it['created'])}" data-q="{esc((it['title'] + ' ' + it['brand'] + ' ' + it['category'] + ' ' + it['color'] + ' ' + it['sku']).lower())}">
-<a class="cl" href="{up}p/{esc(it['sku'])}.html"><div class="ci">{f'<img src="{img}" alt="{esc(it["brand"] + " " + it["name"])}" loading="lazy" width="600" height="600">' if img else ''}{f'<img class="alt" src="{img2}" alt="" loading="lazy" width="600" height="600">' if img2 else ''}{badge}{'<span class="b-deal dl">Deal of the Day</span>' if DEAL.get('sku') == it['sku'] and not sold else ''}{f'<span class="b-size">{esc(it["size"])}</span>' if it['size'] else ''}</div>
+<a class="cl" href="{up}p/{esc(it['sku'])}.html"><div class="ci">{f'<img src="{img}" alt="{esc(it["brand"] + " " + it["name"])}" loading="lazy" width="600" height="600">' if img else ''}{f'<img class="alt" src="{img2}" alt="" loading="lazy" width="600" height="600">' if img2 else ''}{badge}{AI_BADGE if 1 in it.get("ai_idx", ()) else ''}{'<span class="b-deal dl">Deal of the Day</span>' if DEAL.get('sku') == it['sku'] and not sold else ''}{f'<span class="b-size">{esc(it["size"])}</span>' if it['size'] else ''}</div>
 <div class="cb"><span class="cbrand">{esc(it['brand'])} <small>({esc(it['sku'])})</small></span><span class="ct">{esc(it['name'])}</span>
 <span class="cmeta"><span class="cond">{esc(it['cond'])}</span>{'' if sold else '<span>Only 1</span>'}</span>{price_html(it)}</div></a>
 <button type="button" class="cwish" data-wish="{bag_data(it)}" aria-label="Save {esc(it['name'])} to wishlist">{SVG['heart']}</button>
@@ -392,7 +395,9 @@ def product_page(it, all_items, n_imgs):
     meas = " · ".join(f"{k.title()} {v}\"" for k, v in it["meas"].items())
     related = [o for o in all_items if o["sku"] != sku and o["status"] != "Sold" and (o["category"] == it["category"] or o["gender"] == it["gender"])][:4]
     alt = it["brand"] + " " + it["name"]
-    gallery = "".join(f'<img src="{s}" alt="{esc(alt)} photo {i + 1}" width="1200" height="1200"{" loading=lazy" if i else ""}>' for i, s in enumerate(imgs))
+    ai = it.get("ai_idx", set())
+    gimg = lambda i, s: f'<img src="{s}" alt="{esc(alt)} photo {i + 1}{" (AI preview)" if i + 1 in ai else ""}" width="1200" height="1200"{" loading=lazy" if i else ""}>'
+    gallery = "".join(f'<figure class="gai">{gimg(i, s)}{AI_BADGE}</figure>' if i + 1 in ai else gimg(i, s) for i, s in enumerate(imgs))
     thumbs = "".join(f'<button type="button" data-i="{i}" aria-label="Photo {i + 1}"{" aria-current=true" if not i else ""}><img src="{s}" alt=""></button>' for i, s in enumerate(imgs)) if len(imgs) > 1 else ""
     details = [("Brand", it["brand"]), ("Brand origin", it["origin"]), ("Category", it["category"]), ("For", it["gender"]), ("Size", it["size"]), ("Colour", it["color"])] + [(s["label"], s["value"]) for s in it["specs"] if s["label"].lower() not in ("brand", "size", "color", "colour", "gender", "category")]
     seen = set(); details = [(k, v) for k, v in details if v and not (k.lower() in seen or seen.add(k.lower()))]
@@ -684,13 +689,15 @@ def main(items_dir, assets_dir):
     tmp = ROOT / "public.new"; shutil.rmtree(tmp, ignore_errors=True); (tmp / "img").mkdir(parents=True); (tmp / "p").mkdir()
     counts, report = {}, {}
     for it in items:
-        n = 0; issues = []
+        n = 0; issues = []; it["ai_idx"] = set()
         for aid in it["images"]:
             src = Path(assets_dir) / f"{aid}.jpg"
             if not src.exists() and not (CACHE / f"{aid}.png").exists(): continue
             try: cut = original(src)
             except Exception as e: print("photo failed", aid, e); continue
-            n += 1; cut.save(tmp / "img" / f"{it['sku']}-{n}.jpg", quality=86, optimize=True, progressive=True)
+            n += 1
+            if it["kinds"].get(aid) in AI_KINDS: it["ai_idx"].add(n)  # AI-made photo (CapCut studio / street style): labelled on the site
+            cut.save(tmp / "img" / f"{it['sku']}-{n}.jpg", quality=86, optimize=True, progressive=True)
             issues += photo_issues(src, cut, n)
         if n < 3: issues.append(f"Sirf {n} photo. Kam az kam 4 lein: front, back, brand/size tag, aur close-up (fabric ya logo)")
         counts[it["sku"]] = n; it["n_imgs"] = n
