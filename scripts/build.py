@@ -251,8 +251,9 @@ def social_links():
     return "".join(f'<a href="{esc(u)}" target="_blank" rel="noopener">{n}</a>' for n, u in (("Instagram", s.get("instagram")), ("Facebook", s.get("facebook")), ("TikTok", s.get("tiktok"))) if u)
 
 
-def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra="", ld=None):
-    up = "../" * depth; base = CFG["siteUrl"].rstrip("/")
+def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra="", ld=None, noindex=False, root=None, og_type="website"):
+    # root="/" for pages GitHub Pages can serve at any path (404.html), so links work from /p/<missing>.html too
+    up = root if root is not None else "../" * depth; base = CFG["siteUrl"].rstrip("/")
     dl = CFG.get("delivery") or {}
     tp = {"root": up, "wa": wa_digits(), "store": CFG["storeName"], "deal": DEAL, "bundle": CFG.get("bundle", []), "voucher": CFG.get("voucher"),
           "fee": dl.get("fee", 0), "freeOver": dl.get("freeOver", 0), "api": CFG.get("apiUrl") or CFG.get("offersUrl") or ""}
@@ -265,8 +266,8 @@ def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra=""
     phone = esc(CFG["whatsapp"].replace(" ", ""))
     ld_tags = "".join(f'<script type="application/ld+json">{json.dumps(x).replace("</", "<\\/")}</script>' for x in (ld or []))
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{esc(title)}</title><meta name="description" content="{esc(desc[:160])}"><link rel="canonical" href="{esc(base + '/' + canonical)}">
-<meta property="og:type" content="website"><meta property="og:site_name" content="{esc(CFG['storeName'])}"><meta property="og:title" content="{esc(title)}"><meta property="og:description" content="{esc(desc[:200])}">
+<title>{esc(title)}</title><meta name="description" content="{esc(desc[:160])}">{'<meta name="robots" content="noindex, follow">' if noindex else f'<link rel="canonical" href="{esc(base + "/" + canonical)}">'}
+<meta property="og:type" content="{og_type}"><meta property="og:site_name" content="{esc(CFG['storeName'])}"><meta property="og:title" content="{esc(title)}"><meta property="og:description" content="{esc(desc[:200])}">
 <meta property="og:url" content="{esc(base + '/' + canonical)}"><meta property="og:locale" content="en_PK"><meta property="og:image" content="{esc(base + "/" + (image or "og-image.png"))}"><meta name="twitter:card" content="summary_large_image"><meta name="theme-color" content="#15201d">{f'<meta name="google-site-verification" content="{esc(CFG["googleVerification"])}">' if CFG.get("googleVerification") else ''}
 <link rel="icon" href="{up}favicon.svg"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"><style>{CSS}</style>{ld_tags}
@@ -431,8 +432,8 @@ def product_page(it, all_items, n_imgs):
 g&&g.addEventListener('scroll',function(){var i=Math.round(g.scrollLeft/g.clientWidth);t.forEach(function(b){b.setAttribute('aria-current',+b.dataset.i===i)})},{passive:true});
 var s=document.querySelector('[data-share]');s&&(s.onclick=function(){var d={title:document.title,url:location.href};if(navigator.share)navigator.share(d).catch(function(){});else navigator.clipboard.writeText(location.href).then(function(){s.textContent='Link copied'})})})()</script>"""
     if not sold: js += "<script>TP.seen(%s)</script>" % json.dumps({"sku": sku, "b": it["brand"], "n": it["name"], "p": it["price"], "i": f"img/{sku}-1.jpg" if n_imgs else ""})
-    crumbs_ld = {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": CFG["siteUrl"].rstrip("/") + "/"}, {"@type": "ListItem", "position": 2, "name": it["category"]}, {"@type": "ListItem", "position": 3, "name": f"{it['brand']} {it['name']}"}]}
-    return page(f"{it['brand']} {it['name']}{' size ' + it['size'] if it['size'] else ''} | {CFG['storeName']}", it["desc"] or it["title"], body, 1, f"img/{sku}-1.jpg" if n_imgs else None, f"p/{sku}.html", None if sold else wa, js, [product_ld(it, n_imgs), crumbs_ld])
+    crumbs_ld = {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": CFG["siteUrl"].rstrip("/") + "/"}, {"@type": "ListItem", "position": 2, "name": it["category"], "item": CFG["siteUrl"].rstrip("/") + "/" + shop_link(**({"g": g} if g else {}), cat=it["category"])}, {"@type": "ListItem", "position": 3, "name": f"{it['brand']} {it['name']}", "item": CFG["siteUrl"].rstrip("/") + f"/p/{sku}.html"}]}
+    return page(f"{it['brand']} {it['name']}{' size ' + it['size'] if it['size'] else ''} | {CFG['storeName']}", it["desc"] or it["title"], body, 1, f"img/{sku}-1.jpg" if n_imgs else None, f"p/{sku}.html", None if sold else wa, js, [product_ld(it, n_imgs), crumbs_ld], og_type="product")
 
 
 def bundle_line():
@@ -446,22 +447,26 @@ def offer_js():
     return """<script>(function(){var U=%s,box=document.getElementById('offer');if(!box)return;var sku=box.dataset.sku,$=function(i){return document.getElementById(i)},st=null,tick=null;
 function rs(n){return 'Rs '+Math.round(n).toLocaleString('en-PK')}
 function get(q){return fetch(U+'?'+new URLSearchParams(q)).then(function(r){return r.json()})}
-function post(b){return fetch(U,{method:'POST',body:JSON.stringify(b)}).then(function(r){return r.json()})}
+function post(b){var g=function(){return get({p:JSON.stringify(b)})};return fetch(U,{method:'POST',body:JSON.stringify(b)}).then(function(r){return r.json()}).then(function(r){return r&&r.error==='unknown action'?g():r},g)}
+function down(){$('o-sub').innerHTML='Live offers are not loading right now. You can still send your offer on WhatsApp and we will reply.';$('o-form').querySelector('button').textContent='Send offer on WhatsApp';box.dataset.down=1}
 function show(s){if(!s||s.error)return;st=s;$('o-top').textContent=s.highest?rs(s.highest):'None yet';$('o-count').textContent=s.count;var mn=s.highest?Math.max(s.minOffer,s.highest+s.step):s.minOffer;$('o-min').textContent=rs(mn);box.querySelector('[name=amount]').min=mn;box.querySelector('[name=amount]').placeholder=mn;
  if(s.state!=='open'){$('o-form').hidden=true;$('o-sub').textContent=s.state==='won'?'The deal on this item is final.':s.state==='sold'?'This item has been sold.':'Offers are closed for this item.'}
  clearInterval(tick);if(s.endsAt&&s.state==='open'){var t=$('o-timer');t.hidden=false;var f=function(){var d=s.endsAt-Date.now();if(d<=0){t.textContent='Closing...';return}var h=Math.floor(d/36e5),m=Math.floor(d%%36e5/6e4);t.textContent=h+'h '+m+'m left'};f();tick=setInterval(f,3e4)}}
 function msg(t,ok){var m=$('o-msg');m.textContent=t;m.className='o-msg '+(ok?'ok':'err')}
 function wa(t){return 'https://wa.me/%s?text='+encodeURIComponent(t)}
-function mine(phone){get({a:'mine',sku:sku,phone:phone}).then(function(r){var el=$('o-mine');el.hidden=false;if(r.error){el.textContent=r.error;return}if(r.none){el.textContent='No offer found for this number.';return}
+function mine(phone){get({a:'mine',sku:sku,phone:phone}).catch(function(){return {error:'Could not check right now. Please ask us on WhatsApp.'}}).then(function(r){var el=$('o-mine');el.hidden=false;if(r.error){el.textContent=r.error;return}if(r.none){el.textContent='No offer found for this number.';return}
  var h='<p>Your offer: <b>'+rs(r.amount)+'</b> · '+({'new':'Pending','countered':'You have a counter offer','won':'Deal final!','lost':'This offer did not win'}[r.status]||r.status)+'</p>';
  if(r.status==='countered')h+='<p>Our counter offer: <b>'+rs(r.counter)+'</b></p><button type="button" id="o-acc">Accept '+rs(r.counter)+'</button>';
  if(r.status==='won')h+='<a class="buy" target="_blank" rel="noopener" href="'+wa('Hi! My deal on '+sku+' at '+rs(r.amount)+' is final. My address is: ')+'">Send address (WhatsApp)</a>';
  el.innerHTML=h;var a=$('o-acc');a&&(a.onclick=function(){a.disabled=true;post({a:'accept',sku:sku,phone:phone}).then(function(x){if(x.error){msg(x.error)}else{msg('Deal final! Send your address on WhatsApp.',1)}mine(phone);refresh()})})})}
-function refresh(){get({a:'state',sku:sku}).then(show).catch(function(){})}
+function refresh(){get({a:'state',sku:sku}).then(function(s){if(s&&s.error&&!s.sku)return down();show(s)}).catch(down)}
+function viaWa(b){var u=wa('Hi! My offer for '+sku+': Rs '+b.amount+'. Name: '+b.name+', WhatsApp: '+b.phone);if(!window.open(u,'_blank'))location.href=u;msg('Your offer has opened in WhatsApp. Please tap Send there.',1)}
 var saved='';try{saved=localStorage.getItem('st-phone')||'';var nm=localStorage.getItem('st-name')||'';box.querySelector('[name=phone]').value=saved;box.querySelector('[name=name]').value=nm}catch(e){}
-$('o-form').onsubmit=function(e){e.preventDefault();var f=new FormData(e.target),b={a:'offer',sku:sku,name:f.get('name'),phone:f.get('phone'),amount:f.get('amount')},btn=e.target.querySelector('button');btn.disabled=true;msg('Sending...',1);
+$('o-form').onsubmit=function(e){e.preventDefault();var f=new FormData(e.target),b={a:'offer',sku:sku,name:String(f.get('name')||'').trim(),phone:String(f.get('phone')||'').trim(),amount:f.get('amount')},btn=e.target.querySelector('button');
+ if(!/^(\\+?92|0)?3\\d{9}$/.test(b.phone.replace(/[\\s-]/g,''))){msg('Please enter a valid WhatsApp number (03xx xxxxxxx).');return}
  try{localStorage.setItem('st-phone',b.phone);localStorage.setItem('st-name',b.name)}catch(x){}
- post(b).then(function(r){btn.disabled=false;if(r.error){msg(r.error);return}msg(r.message,1);show(r);mine(b.phone)}).catch(function(){btn.disabled=false;msg('Connection problem. Please try again.')})};
+ if(box.dataset.down)return viaWa(b);btn.disabled=true;msg('Sending...',1);
+ post(b).then(function(r){btn.disabled=false;if(r.error){msg(r.error);return}msg(r.message,1);show(r);mine(b.phone)}).catch(function(){btn.disabled=false;down();viaWa(b)})};
 $('o-check').onclick=function(){var p=box.querySelector('[name=phone]').value||prompt('Your WhatsApp number');if(p)mine(p)};
 refresh();if(saved)mine(saved)})()</script>""" % (json.dumps(url), wa_digits())
 
@@ -675,6 +680,9 @@ g.innerHTML=w.map(function(it){return '<article class="card"><a class="cl" href=
 FAQ = []
 
 
+NOINDEX = {"track"}  # utility pages kept out of Google (wishlist and 404 are noindex too)
+
+
 def sitemap(base, rows):
     """rows: (path, lastmod YYYY-MM-DD or '', [image urls])"""
     out = ['<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">']
@@ -719,17 +727,17 @@ def main(items_dir, assets_dir):
     for slug, (title, lead, html_) in info_pages().items():
         extra = TRACK_JS if slug == "track" else ""
         faq_ld = [{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": re.sub(r"<[^>]+>", "", a)}} for q, a in FAQ]}] if slug == "faq" else None
-        (tmp / f"{slug}.html").write_text(page(f"{title} | {CFG['storeName']}", lead, f'<section class="infop"><nav class="crumbs"><a href="index.html">Home</a> / <span>{esc(title)}</span></nav><h1>{esc(title)}</h1><p class="lead">{esc(lead)}</p>{html_}</section>', 0, None, f"{slug}.html", None, extra, faq_ld))
+        (tmp / f"{slug}.html").write_text(page(f"{title} | {CFG['storeName']}", lead, f'<section class="infop"><nav class="crumbs"><a href="index.html">Home</a> / <span>{esc(title)}</span></nav><h1>{esc(title)}</h1><p class="lead">{esc(lead)}</p>{html_}</section>', 0, None, f"{slug}.html", None, extra, faq_ld, noindex=slug in NOINDEX))
     (tmp / "wishlist.html").write_text(page(f"Wishlist | {CFG['storeName']}", "Your saved items.", WISH_BODY, 0, None, "wishlist.html", None,
-        WISH_JS + SVG["heart"].replace("'", "\\'") + """</button></article>'}).join('')})()</script>"""))
+        WISH_JS + SVG["heart"].replace("'", "\\'") + """</button></article>'}).join('')})()</script>""", noindex=True))
     (tmp / "photo-report.json").write_text(json.dumps(report, ensure_ascii=False, indent=1))
     (tmp / "items.json").write_text(json.dumps([{"sku": i["sku"], "title": i["title"], "price": i["price"], "status": i["status"]} for i in items]))
     shutil.copy(Path(__file__).parent / "favicon.svg", tmp / "favicon.svg")
     promo = Path(__file__).parent.parent / "promo"  # social media campaign images, served at /promo/ so Metricool can fetch them
     if promo.is_dir(): shutil.copytree(promo, tmp / "promo")
-    (tmp / "404.html").write_text(page(f"Not found | {CFG['storeName']}", CFG["tagline"], '<section class="nf"><h1>This page or item is no longer available</h1><p>Take a look at our other items.</p><a class="btn" href="' + esc(CFG['siteUrl']) + '/">Visit the store</a></section>'))
+    (tmp / "404.html").write_text(page(f"Not found | {CFG['storeName']}", CFG["tagline"], '<section class="nf"><h1>This page or item is no longer available</h1><p>Take a look at our other items.</p><a class="btn" href="/">Visit the store</a></section>', noindex=True, root="/"))
     base = CFG["siteUrl"].rstrip("/")
-    (tmp / "sitemap.xml").write_text(sitemap(base, [("", day.strftime("%Y-%m-%d"), [])] + [(f"{s}.html", "", []) for s, _ in INFO] +
+    (tmp / "sitemap.xml").write_text(sitemap(base, [("", day.strftime("%Y-%m-%d"), [])] + [(f"{s}.html", "", []) for s, _ in INFO if s not in NOINDEX] +
         [(f"p/{i['sku']}.html", str(i["created"])[:10], [f"{base}/img/{i['sku']}-{n}.jpg" for n in range(1, counts[i["sku"]] + 1)]) for i in items]))
     for f in ("logo.png", "og-image.png"):
         if (Path(__file__).parent / f).exists(): shutil.copy(Path(__file__).parent / f, tmp / f)
