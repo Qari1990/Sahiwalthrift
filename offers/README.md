@@ -12,6 +12,19 @@ Free, runs in your own Google account. Website orders, offers and newsletter sig
 
 If you change `Code.gs` later: Deploy > Manage deployments > edit (pencil) > Version: New version > Deploy. The URL stays the same.
 
+## Check that the website can reach the sheet
+
+Open the web app URL with `?a=ping` at the end in any browser (incognito is best), for example
+`https://script.google.com/macros/s/.../exec?a=ping`. You should see something like
+`{"ok":true,"store":"ABCThrift","version":"2026-11-11","websiteItems":52,...}`.
+
+- A Google sign-in page or "Sorry, unable to open the file" means the deployment is not set to "Who has access: Anyone". Edit the deployment and change it.
+- `"missingTabs":[...]` means `setup` has not been run. Run it once.
+- `"websiteItems":0` means the script could not read `https://abcthrift.store/items.json`. Check the site is up.
+- No `"version"` in the answer means the old code is still deployed. Deploy a new version (above).
+
+If the web app is down, the website still works: orders and offers open in WhatsApp instead.
+
 ## Orders
 
 - Every website order is a row in "Orders" with an order number like AT-261102-AB12. You get an email with a one-tap WhatsApp link to confirm with the customer.
