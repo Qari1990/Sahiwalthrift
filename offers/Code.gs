@@ -15,7 +15,7 @@
  *   Items   one row per item that got an offer. "reserve" is your hidden lowest price
  *           (default 75% of the listed price); set "state" to "sold" when it sells elsewhere.
  */
-const VERSION = "2026-11-11b";
+const VERSION = "2026-11-11d";
 const SITE = "https://abcthrift.store";
 const SITES = [SITE, "https://www.abcthrift.store", "https://qari1990.github.io/Sahiwalthrift", "http://abcthrift.store"]; // fallbacks if HTTPS is not ready yet
 const STORE = "ABCThrift";
@@ -27,7 +27,7 @@ const HOLD_H = 24;         // a won offer holds the item this long; not sold by 
 const COUNTER_H = 24;      // a counter offer is valid this long
 const STEP = 50;           // a new offer must beat the highest by at least this much
 const DELIVERY_FEE = 250;  // must match site.json "delivery"
-const FREE_OVER = 2000;    // free delivery when goods (after discounts) reach this
+const FREE_OVER = 1999;    // free delivery when goods (after discounts) reach this
 
 const OFFER_COLS = ["at", "sku", "name", "phone", "amount", "status", "counter", "counterAt", "note"];
 const ITEM_COLS = ["sku", "title", "price", "reserve", "firstAt", "endsAt", "state", "winnerPhone", "winnerAmount"];
@@ -236,7 +236,8 @@ function placeOrder(p) {
   const no = "AT-" + d + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
   const lines = list.map((i) => `${i.b || ""} ${i.n || ""}${i.s ? " (size " + i.s + ")" : ""} [${i.sku}] ${rs(i.price)}`);
   const subtotal = +p.subtotal || 0, discount = +p.discount || 0, goods = Math.max(0, subtotal - discount);
-  const delivery = goods >= FREE_OVER ? 0 : DELIVERY_FEE; // same rule as the website, so the sheet and emails always match it
+  // same rule as the website, so the sheet and emails always match it; during a sale, items count at their regular price
+  const delivery = Math.max(goods, +p.regular || 0) >= FREE_OVER ? 0 : DELIVERY_FEE;
   const o = { at: new Date(), no, status: "New", name, phone, email, city, address, note, items: lines.join("\n"), subtotal, discount, delivery, total: goods + delivery, updated: new Date() };
   add("Orders", ORDER_COLS, o);
   const wa = waLink(phone, `Hi ${name}! ${STORE} here. We received your order ${no} (${rs(o.total)}). Please reply "Yes" to confirm.`);
