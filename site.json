@@ -15,15 +15,19 @@
   },
   "delivery": {
     "fee": 250,
-    "freeOver": 3500,
+    "freeOver": 2000,
     "days": "3-5 working days all over Pakistan, 1-2 days in Sahiwal"
+  },
+  "offers": {
+    "hours": 24,
+    "holdHours": 24
   },
   "returns": {
     "days": 7
   },
   "announcements": [
     "Cash on delivery all over Pakistan",
-    "Free delivery on orders over Rs 3,500",
+    "Free delivery on orders over Rs 2,000",
     "New winter drop: jackets, hoodies and sweaters",
     "7-day easy returns on every order"
   ],
