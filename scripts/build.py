@@ -199,7 +199,8 @@ def load_items(items_dir):
             "brand": brand, "name": clean_name(c.get("title") or "", brand, d.get("size") or "", d.get("category") or "Clothing"),
             "origin": ((d.get("ai") or {}).get("identified") or {}).get("brand_origin") or "", "hl": highlights(d), "category": d.get("category") or "Clothing", "gender": d.get("gender") or "", "size": d.get("size") or "",
             "color": d.get("color") or "", "cond": cond_label(d), "fix": fix_note(d), "desc": positive(c.get("description_en")),
-            "specs": specs, "meas": meas, "images": d.get("images") or [], "kinds": d.get("photoKind") or {}, "created": d.get("createdAt") or "",
+            "specs": specs, "meas": meas, "images": d.get("images") or [], "kinds": d.get("photoKind") or {}, "created": d.get("createdAt") or "", "updated": d.get("updatedAt") or d.get("createdAt") or "",
+            "material": next((s["value"] for s in specs if re.match(r"(?i)^(material|shell|fabric)$", s.get("label", ""))), ""),
         })
     return sorted(items, key=lambda i: i["created"], reverse=True)
 
@@ -246,12 +247,102 @@ def shop_link(up="", **q):
     return f"{up}index.html" + ("?" + urllib.parse.urlencode(q) if q else "") + "#shop"
 
 
+# ---------- SEO: product types, collection (landing) pages ----------
+JACKET_RX = re.compile(r"(?i)jacket|puffer|parka|coat|vest|gilet|bomber|softshell|windbreaker|anorak")
+PUFFER_RX = re.compile(r"(?i)puffer|quilted|padded|parka")
+KIND_ONE = {"Jackets": "jacket", "Hoodies": "hoodie", "Sweatshirts": "sweatshirt"}
+
+
+def kind(it):
+    """What the item really is, from its title (the tool's category is sometimes off, e.g. a hoodie saved as Puffer Jacket)."""
+    t = f"{it['title']} {it['name']}"
+    if re.search(r"(?i)hoodie", t): return "Hoodies"
+    if JACKET_RX.search(t) or it["category"] in ("Coat", "Puffer Jacket", "Denim Jacket", "Leather Jacket", "Jacket"):
+        return "Sweatshirts" if re.search(r"(?i)sweatshirt|pullover|crew ?neck", t) and not JACKET_RX.search(t) else "Jackets"
+    if re.search(r"(?i)sweatshirt|pullover|crew ?neck|half-zip|quarter-zip|sweater|cardigan|polo", t) or it["category"] in ("Sweatshirt", "Polo", "Sweater"): return "Sweatshirts"
+    return it["category"]
+
+
+def full_name(it):
+    n = f"{it['brand']} {it['name']}" if it["brand"].lower() not in it["name"].lower() else it["name"]
+    if len(n) > 55 and "," in n: n = n.split(",")[0]  # some tool titles are long, cut-off feature lists
+    return clip(n, 70).rstrip("…")
+
+
+def slugify(s):
+    return re.sub(r"[^a-z0-9]+", "-", s.lower().replace("&", "").replace("à", "a").replace("ï", "i")).strip("-")
+
+
+# slug, h1, <title>, meta description, intro, filter. Pages with no live items are not built.
+COLLECTIONS = [
+    ("thrift-jackets-pakistan", "Thrift jackets in Pakistan", "Thrift Jackets in Pakistan | Pre-loved Branded Jackets",
+     "Shop pre-loved branded jackets, puffers, coats and vests online in Pakistan. Hand-picked in Sahiwal, real photos, cash on delivery and 7-day returns.",
+     "Branded winter jackets for a fraction of the new price. Every jacket here is a one-off pre-loved piece: puffers, parkas, coats, softshells, bombers and gilets from international labels, hand-picked in Sahiwal, washed, checked and photographed for real. Order online and pay cash on delivery anywhere in Pakistan.",
+     lambda i: kind(i) == "Jackets"),
+    ("puffer-jackets", "Pre-loved puffer jackets", "Puffer Jackets in Pakistan | Pre-loved Branded Puffers",
+     "Warm pre-loved puffer, quilted and padded jackets from international brands. Men, women and kids. Cash on delivery all over Pakistan.",
+     "Quilted, padded and puffer jackets for Pakistani winters, from brands like {brands}. Each one is a single pre-loved piece in checked condition, so the size and colour you see is the one you get.",
+     lambda i: kind(i) == "Jackets" and PUFFER_RX.search(i["title"] + " " + i["name"])),
+    ("used-branded-hoodies", "Used branded hoodies", "Used Branded Hoodies in Pakistan | Pre-loved Hoodies",
+     "Pre-loved branded hoodies. Zip-up and pullover hoodies for men, women and kids, with cash on delivery in Pakistan.",
+     "Pullover and zip-up hoodies from international brands, pre-loved and checked by hand. Brands in stock: {brands}. Warm, comfortable and priced well below new, with cash on delivery all over Pakistan.",
+     lambda i: kind(i) == "Hoodies"),
+    ("branded-sweatshirts", "Branded sweatshirts", "Branded Sweatshirts in Pakistan | Pre-loved Sweatshirts",
+     "Pre-loved branded sweatshirts, half-zips and crewnecks for men, women and kids. Cash on delivery all over Pakistan.",
+     "Crewnecks, half-zips and quarter-zips from international labels like {brands}. Every sweatshirt is a one-off pre-loved piece, washed and checked, with real photos and an honest condition grade.",
+     lambda i: kind(i) == "Sweatshirts"),
+    ("mens-thrift-clothes", "Men's thrift clothes", "Men's Thrift Clothes in Pakistan | Pre-loved Branded Menswear",
+     "Pre-loved branded jackets, hoodies and sweatshirts for men. Hand-picked in Sahiwal, cash on delivery all over Pakistan, 7-day returns.",
+     "Branded menswear at thrift prices: puffer jackets, coats, hoodies and sweatshirts in sizes {sizes}, from {brands}. One piece of each, so check the size and measurements and order before someone else does.",
+     lambda i: in_gender(i, "Men")),
+    ("womens-thrift-clothes", "Women's thrift clothes", "Women's Thrift Clothes in Pakistan | Pre-loved Branded Womenswear",
+     "Pre-loved branded coats, puffer jackets and sweatshirts for women. Real photos, cash on delivery all over Pakistan, 7-day returns.",
+     "Warm coats, parkas, puffers and sweatshirts for women from international brands like {brands}, pre-loved and hand-checked. Cash on delivery anywhere in Pakistan.",
+     lambda i: in_gender(i, "Women")),
+    ("kids-winter-clothes", "Kids winter clothes", "Kids Winter Clothes in Pakistan | Pre-loved Branded Kidswear",
+     "Pre-loved branded kids jackets, hoodies and sweatshirts from ages 2 to 14. Low prices, cash on delivery all over Pakistan.",
+     "Branded winter wear for kids, from toddler sizes to 14 years: jackets, hoodies and sweatshirts from labels like {brands}. Kids grow fast, so pre-loved makes sense.",
+     lambda i: i["gender"] == "Kids"),
+    ("under-1000", "Branded clothes under Rs 1,000", "Branded Clothes Under Rs 1,000 | Thrift Store Pakistan",
+     "Pre-loved branded hoodies, sweatshirts and jackets under Rs 1,000. Cash on delivery all over Pakistan.",
+     "Original-label pre-loved clothes for under a thousand rupees. Add two or more items to your bag for a bundle discount.",
+     lambda i: i["price"] < 1000),
+]
+COLL = []    # [(slug, h1, n_live)] of built collection pages, filled in main()
+BRANDS = {}  # brand slug -> brand name, for brands with 2+ items on the site
+
+
+def coll_url(up, slug):
+    return f"{up}{slug}.html" if any(c[0] == slug for c in COLL) else ""
+
+
+def gender_page(g):
+    return {"Men": "mens-thrift-clothes", "Women": "womens-thrift-clothes", "Kids": "kids-winter-clothes"}[g]
+
+
+def kind_page(k):
+    return {"Jackets": "thrift-jackets-pakistan", "Hoodies": "used-branded-hoodies", "Sweatshirts": "branded-sweatshirts"}.get(k, "")
+
+
+def g_link(up, g, **q):
+    """Static landing page for a gender when it exists (crawlable), else the filtered shop."""
+    return (coll_url(up, gender_page(g)) if not q else "") or shop_link(up, g=g, **q)
+
+
 def social_links():
     s = CFG.get("social") or {}
     return "".join(f'<a href="{esc(u)}" target="_blank" rel="noopener">{n}</a>' for n, u in (("Instagram", s.get("instagram")), ("Facebook", s.get("facebook")), ("TikTok", s.get("tiktok"))) if u)
 
 
-def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra="", ld=None, noindex=False, root=None, og_type="website"):
+FONTS = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+
+
+def clip(text, n):
+    t = re.sub(r"\s+", " ", str(text or "")).strip()
+    return t if len(t) <= n else t[:n - 1].rsplit(" ", 1)[0].rstrip(",;:-") + "…"
+
+
+def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra="", ld=None, noindex=False, root=None, og_type="website", meta=None, img_alt=""):
     # root="/" for pages GitHub Pages can serve at any path (404.html), so links work from /p/<missing>.html too
     up = root if root is not None else "../" * depth; base = CFG["siteUrl"].rstrip("/")
     dl = CFG.get("delivery") or {}
@@ -259,33 +350,40 @@ def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra=""
           "fee": dl.get("fee", 0), "freeOver": dl.get("freeOver", 0), "api": CFG.get("apiUrl") or CFG.get("offersUrl") or ""}
     v = CFG.get("voucher")
     ann = list(CFG.get("announcements") or ["Cash on delivery all over Pakistan"])
-    nav = "".join(f'<div class="nv"><a href="{shop_link(up, g=g)}">{g}</a>' + (f'<div class="nv-dd"><a href="{shop_link(up, g=g)}">All {g.lower()}</a>' + "".join(f'<a href="{esc(shop_link(up, g=g, cat=c))}">{esc(c)}</a>' for c in NAV.get(g, [])) + "</div>" if NAV.get(g) else "") + "</div>" for g in GENDERS)
-    drawer = "".join(f'<details{" open" if not i else ""}><summary>{g}</summary><a href="{shop_link(up, g=g)}">All {g.lower()}</a>' + "".join(f'<a href="{esc(shop_link(up, g=g, cat=c))}">{esc(c)}</a>' for c in NAV.get(g, [])) + "</details>" for i, g in enumerate(GENDERS))
+    nav = "".join(f'<div class="nv"><a href="{g_link(up, g)}">{g}</a>' + (f'<div class="nv-dd"><a href="{g_link(up, g)}">All {g.lower()}</a>' + "".join(f'<a href="{esc(shop_link(up, g=g, cat=c))}">{esc(c)}</a>' for c in NAV.get(g, [])) + "</div>" if NAV.get(g) else "") + "</div>" for g in GENDERS)
+    drawer = "".join(f'<details{" open" if not i else ""}><summary>{g}</summary><a href="{g_link(up, g)}">All {g.lower()}</a>' + "".join(f'<a href="{esc(shop_link(up, g=g, cat=c))}">{esc(c)}</a>' for c in NAV.get(g, [])) + "</details>" for i, g in enumerate(GENDERS))
     help_links = "".join(f'<a href="{up}{s}.html">{esc(t)}</a>' for s, t in INFO)
     soc = social_links()
+    pop = "".join(f'<a href="{up}{c}.html">{esc(h)}</a>' for c, h, _ in COLL) + (f'<a href="{up}brands.html">All brands</a>' if BRANDS else "")
+    base_url = base + "/" + canonical
+    m = meta or {}
+    robots = '<meta name="robots" content="noindex, follow">' if noindex else f'<link rel="canonical" href="{esc(base_url)}"><meta name="robots" content="index, follow, max-image-preview:large">'
+    og_img = base + "/" + (image or "og-image.png")
+    extra_meta = "".join(f'<meta property="{esc(k)}" content="{esc(v)}">' for k, v in m.items() if v not in (None, ""))
     phone = esc(CFG["whatsapp"].replace(" ", ""))
     ld_tags = "".join(f'<script type="application/ld+json">{json.dumps(x).replace("</", "<\\/")}</script>' for x in (ld or []))
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{esc(title)}</title><meta name="description" content="{esc(desc[:160])}">{'<meta name="robots" content="noindex, follow">' if noindex else f'<link rel="canonical" href="{esc(base + "/" + canonical)}">'}
-<meta property="og:type" content="{og_type}"><meta property="og:site_name" content="{esc(CFG['storeName'])}"><meta property="og:title" content="{esc(title)}"><meta property="og:description" content="{esc(desc[:200])}">
-<meta property="og:url" content="{esc(base + '/' + canonical)}"><meta property="og:locale" content="en_PK"><meta property="og:image" content="{esc(base + "/" + (image or "og-image.png"))}"><meta name="twitter:card" content="summary_large_image"><meta name="theme-color" content="#15201d">{f'<meta name="google-site-verification" content="{esc(CFG["googleVerification"])}">' if CFG.get("googleVerification") else ''}
+<title>{esc(title)}</title><meta name="description" content="{esc(clip(desc, 158))}">{robots}
+<meta property="og:type" content="{og_type}"><meta property="og:site_name" content="{esc(CFG['storeName'])}"><meta property="og:title" content="{esc(title)}"><meta property="og:description" content="{esc(clip(desc, 200))}">
+<meta property="og:url" content="{esc(base_url)}"><meta property="og:locale" content="en_PK"><meta property="og:image" content="{esc(og_img)}"><meta property="og:image:alt" content="{esc(img_alt or title)}">{extra_meta}
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="{esc(title)}"><meta name="twitter:description" content="{esc(clip(desc, 200))}"><meta name="twitter:image" content="{esc(og_img)}"><meta name="theme-color" content="#15201d">{f'<meta name="google-site-verification" content="{esc(CFG["googleVerification"])}">' if CFG.get("googleVerification") else ''}
 <link rel="icon" href="{up}favicon.svg"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"><style>{CSS}</style>{ld_tags}
+<link rel="preload" as="style" href="{FONTS}" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="{FONTS}"></noscript><style>{CSS}</style>{ld_tags}
 <script>window.TP={json.dumps(tp).replace("</", "<\\/")};</script></head><body>
 <div class="topbar"><div class="ann" id="ann">{''.join(f'<span{" class=on" if not i else ""}>{esc(a)}</span>' for i, a in enumerate(ann))}</div>{f'<button type="button" class="tb-v" data-voucher>Free {rs(v["amount"])} voucher</button>' if v else ''}</div>
 <header class="hd"><button type="button" class="hd-ic hd-menu" data-menu-open aria-label="Open menu">{SVG['menu']}</button>
 <a class="logo" href="{up}index.html"><span class="mark">{esc(CFG["storeName"][:1])}</span><span>{logo_text()}</span></a>
-<nav class="mainnav" aria-label="Main">{nav}<a href="{up}index.html?sort=new#shop">New arrivals</a><a href="{up}index.html#deal" class="dl">Deal of the Day</a><a href="{shop_link(up, max=999)}">Under Rs 999</a></nav>
+<nav class="mainnav" aria-label="Main">{nav}<a href="{up}index.html?sort=new#shop">New arrivals</a><a href="{up}index.html#deal" class="dl">Deal of the Day</a><a href="{coll_url(up, 'under-1000') or shop_link(up, max=999)}">Under Rs 1,000</a></nav>
 <div class="hd-act"><a class="hd-ic" href="{up}index.html?find=1#shop" aria-label="Search">{SVG['search']}</a><a class="hd-ic" href="{up}wishlist.html" aria-label="Wishlist">{SVG['heart']}<span class="bag-n" data-wish-n hidden>0</span></a>
 <button type="button" class="hd-ic hd-bag" data-bag-open aria-label="Open bag">{SVG['bag']}<span class="bag-n" id="bag-n" hidden>0</span></button></div></header>
 <aside class="menu" id="menu" hidden aria-label="Menu"><div class="menu-in"><div class="bag-hd"><b>Menu</b><button type="button" data-menu-close aria-label="Close">×</button></div>
-<a class="menu-top" href="{up}index.html?sort=new#shop">New arrivals</a><a class="menu-top dl" href="{up}index.html#deal">Deal of the Day</a><a class="menu-top" href="{shop_link(up, max=999)}">Under Rs 999</a>
-{drawer}<details><summary>Shop by condition</summary>{''.join(f'<a href="{esc(shop_link(up, cond=c))}">{esc(c)}</a>' for c in CONDS)}</details>
+<a class="menu-top" href="{up}index.html?sort=new#shop">New arrivals</a><a class="menu-top dl" href="{up}index.html#deal">Deal of the Day</a><a class="menu-top" href="{coll_url(up, 'under-1000') or shop_link(up, max=999)}">Under Rs 1,000</a>
+{drawer}{f'<details><summary>Popular</summary>{pop}</details>' if pop else ''}<details><summary>Shop by condition</summary>{''.join(f'<a href="{esc(shop_link(up, cond=c))}">{esc(c)}</a>' for c in CONDS)}</details>
 <details><summary>Help</summary>{help_links}</details>
 <a class="buy" href="{esc(order_link())}" target="_blank" rel="noopener">{ICON}Chat on WhatsApp</a></div></aside>
 <main>{body}</main>
 <footer class="ft"><div class="ft-in"><div><strong>{logo_text()}</strong><p>{esc(CFG['tagline'])}</p><p class="ft-soc">{soc or (esc('Instagram, Facebook, TikTok: ' + CFG['handle']) if CFG.get('handle') else '')}</p></div>
-<div><strong>Shop</strong><p class="ft-links">{''.join(f'<a href="{shop_link(up, g=g)}">{g}</a>' for g in GENDERS)}<a href="{up}index.html?sort=new#shop">New arrivals</a><a href="{shop_link(up, max=999)}">Under Rs 999</a><a href="{up}wishlist.html">Wishlist</a></p></div>
+<div><strong>Shop</strong><p class="ft-links">{''.join(f'<a href="{g_link(up, g)}">{g}</a>' for g in GENDERS)}<a href="{up}index.html?sort=new#shop">New arrivals</a>{pop}<a href="{up}wishlist.html">Wishlist</a></p></div>
 <div><strong>Help</strong><p class="ft-links">{help_links}</p></div>
 <div><strong>Order &amp; support</strong><p>WhatsApp / Call <a href="tel:{phone}">{esc(CFG['whatsapp'])}</a>{f'<br><a href="mailto:{esc(CFG["email"])}">{esc(CFG["email"])}</a>' if CFG.get('email') else ''}<br>{esc(CFG.get('city', ''))}<br>Cash on delivery all over Pakistan</p>
 <form class="news" id="news"><b>Get new drops first</b><div><input name="email" type="email" required placeholder="Email address" aria-label="Email"><button type="submit">Join</button></div><p class="o-msg" id="news-msg"></p></form></div></div>
@@ -325,15 +423,20 @@ def price_html(it, cls="cp"):
 
 
 AI_KINDS = ("studio", "street")
+
+
+def alt_text(it, n=0):
+    bits = [full_name(it), it["color"].lower() if it["color"] and it["color"].lower() not in it["name"].lower() else "", f"size {it['size']}" if it["size"] else "", f"for {it['gender'].lower()}" if it["gender"] in GENDERS else ""]
+    return ", ".join(b for b in bits if b) + (f" (photo {n})" if n > 1 else "")
 AI_BADGE = '<span class="b-ai" title="AI-made preview of this exact item. See the real photos on the product page.">AI preview</span>'
 
 def card(it, up=""):
-    img = f'{up}img/{it["sku"]}-1.jpg' if it["images"] else ""
-    img2 = f'{up}img/{it["sku"]}-2.jpg' if it.get("n_imgs", 0) > 1 else ""
+    img = f'{up}img/t/{it["sku"]}-1.jpg' if it["images"] else ""
+    img2 = f'{up}img/t/{it["sku"]}-2.jpg' if it.get("n_imgs", 0) > 1 else ""
     sold = it["status"] == "Sold"
     badge = '<span class="b-sold">Sold out</span>' if sold else (f'<span class="b-off">-{off(it)}%</span>' if off(it) else '<span class="b-new">Just in</span>' if it.get("fresh") else '')
     return f"""<article class="card{' is-sold' if sold else ''}" data-sku="{esc(it['sku'])}" data-cat="{esc(it['category'])}" data-g="{esc(it['gender'])}" data-size="{esc(it['size'])}" data-brand="{esc(it['brand'])}" data-cond="{esc(it['cond'])}" data-price="{it['price']}" data-off="{off(it)}" data-new="{esc(it['created'])}" data-q="{esc((it['title'] + ' ' + it['brand'] + ' ' + it['category'] + ' ' + it['color'] + ' ' + it['sku']).lower())}">
-<a class="cl" href="{up}p/{esc(it['sku'])}.html"><div class="ci">{f'<img src="{img}" alt="{esc(it["brand"] + " " + it["name"])}" loading="lazy" width="600" height="600">' if img else ''}{f'<img class="alt" src="{img2}" alt="" loading="lazy" width="600" height="600">' if img2 else ''}{badge}{AI_BADGE if 1 in it.get("ai_idx", ()) else ''}{'<span class="b-deal dl">Deal of the Day</span>' if DEAL.get('sku') == it['sku'] and not sold else ''}{f'<span class="b-size">{esc(it["size"])}</span>' if it['size'] else ''}</div>
+<a class="cl" href="{up}p/{esc(it['sku'])}.html"><div class="ci">{f'<img src="{img}" alt="{esc(alt_text(it))}" loading="lazy" decoding="async" width="600" height="600">' if img else ''}{f'<img class="alt" src="{img2}" alt="" loading="lazy" decoding="async" width="600" height="600">' if img2 else ''}{badge}{AI_BADGE if 1 in it.get("ai_idx", ()) else ''}{'<span class="b-deal dl">Deal of the Day</span>' if DEAL.get('sku') == it['sku'] and not sold else ''}{f'<span class="b-size">{esc(it["size"])}</span>' if it['size'] else ''}</div>
 <div class="cb"><span class="cbrand">{esc(it['brand'])} <small>({esc(it['sku'])})</small></span><span class="ct">{esc(it['name'])}</span>
 <span class="cmeta"><span class="cond">{esc(it['cond'])}</span>{'' if sold else '<span>Only 1</span>'}</span>{price_html(it)}</div></a>
 <button type="button" class="cwish" data-wish="{bag_data(it)}" aria-label="Save {esc(it['name'])} to wishlist">{SVG['heart']}</button>
@@ -365,14 +468,21 @@ def delivery_line():
 
 
 def product_ld(it, n_imgs):
-    base = CFG["siteUrl"].rstrip("/")
-    return {"@context": "https://schema.org", "@type": "Product", "name": f"{it['brand']} {it['name']}", "sku": it["sku"],
-            "image": [f"{base}/img/{it['sku']}-{i}.jpg" for i in range(1, n_imgs + 1)], "description": it["desc"] or it["title"],
-            "brand": {"@type": "Brand", "name": it["brand"]}, "itemCondition": "https://schema.org/UsedCondition",
-            "offers": {"@type": "Offer", "price": it["price"], "priceCurrency": "PKR", "url": f"{base}/p/{it['sku']}.html",
-                       "availability": "https://schema.org/SoldOut" if it["status"] == "Sold" else "https://schema.org/InStock",
-                       "itemCondition": "https://schema.org/UsedCondition", "seller": {"@type": "Organization", "name": CFG["storeName"]},
-                       "shippingDetails": shipping_ld(it["price"]), "hasMerchantReturnPolicy": return_ld()}}
+    base = CFG["siteUrl"].rstrip("/"); url = f"{base}/p/{it['sku']}.html"
+    ld = {"@context": "https://schema.org", "@type": "Product", "@id": url + "#product", "name": full_name(it), "sku": it["sku"], "mpn": it["sku"], "url": url,
+          "image": [f"{base}/img/{it['sku']}-{i}.jpg" for i in range(1, n_imgs + 1)], "description": " ".join(x for x in (it["desc"] or it["title"], seo_blurb(it)) if x),
+          "brand": {"@type": "Brand", "name": it["brand"]}, "itemCondition": "https://schema.org/UsedCondition", "category": f"Apparel & Accessories > Clothing > {kind(it)}",
+          "offers": {"@type": "Offer", "price": it["price"], "priceCurrency": "PKR", "url": url, "priceValidUntil": (datetime.now(timezone.utc) + timedelta(days=60)).strftime("%Y-%m-%d"),
+                     "availability": "https://schema.org/SoldOut" if it["status"] == "Sold" else "https://schema.org/InStock",
+                     "itemCondition": "https://schema.org/UsedCondition", "seller": {"@type": "Organization", "@id": base + "/#store", "name": CFG["storeName"]},
+                     "shippingDetails": shipping_ld(it["price"]), "hasMerchantReturnPolicy": return_ld()}}
+    if it["color"]: ld["color"] = it["color"]
+    if it["size"]: ld["size"] = it["size"]
+    if it["material"]: ld["material"] = it["material"]
+    sg = {"Men": "male", "Women": "female", "Unisex": "unisex"}.get(it["gender"])
+    if sg: ld["audience"] = {"@type": "PeopleAudience", "suggestedGender": sg, "suggestedMinAge": 13}
+    elif it["gender"] == "Kids": ld["audience"] = {"@type": "PeopleAudience", "suggestedGender": "unisex", "suggestedMaxAge": 13}
+    return ld
 
 
 def shipping_ld(price):
@@ -397,9 +507,9 @@ def product_page(it, all_items, n_imgs):
     related = [o for o in all_items if o["sku"] != sku and o["status"] != "Sold" and (o["category"] == it["category"] or o["gender"] == it["gender"])][:4]
     alt = it["brand"] + " " + it["name"]
     ai = it.get("ai_idx", set())
-    gimg = lambda i, s: f'<img src="{s}" alt="{esc(alt)} photo {i + 1}{" (AI preview)" if i + 1 in ai else ""}" width="1200" height="1200"{" loading=lazy" if i else ""}>'
+    gimg = lambda i, s: f'<img src="{s}" alt="{esc(alt_text(it, i + 1))}{" (AI preview)" if i + 1 in ai else ""}" width="1200" height="1200"{" loading=lazy decoding=async" if i else " fetchpriority=high"}>'
     gallery = "".join(f'<figure class="gai">{gimg(i, s)}{AI_BADGE}</figure>' if i + 1 in ai else gimg(i, s) for i, s in enumerate(imgs))
-    thumbs = "".join(f'<button type="button" data-i="{i}" aria-label="Photo {i + 1}"{" aria-current=true" if not i else ""}><img src="{s}" alt=""></button>' for i, s in enumerate(imgs)) if len(imgs) > 1 else ""
+    thumbs = "".join(f'<button type="button" data-i="{i}" aria-label="Photo {i + 1}"{" aria-current=true" if not i else ""}><img src="{s.replace("/img/", "/img/t/")}" alt="" loading="lazy" width="80" height="80"></button>' for i, s in enumerate(imgs)) if len(imgs) > 1 else ""
     details = [("Brand", it["brand"]), ("Brand origin", it["origin"]), ("Category", it["category"]), ("For", it["gender"]), ("Size", it["size"]), ("Colour", it["color"])] + [(s["label"], s["value"]) for s in it["specs"] if s["label"].lower() not in ("brand", "size", "color", "colour", "gender", "category")]
     seen = set(); details = [(k, v) for k, v in details if v and not (k.lower() in seen or seen.add(k.lower()))]
     save = it["retailPkr"] - it["price"] if it["retailPkr"] else 0
@@ -409,7 +519,11 @@ def product_page(it, all_items, n_imgs):
     buy = f'<button type="button" class="buy" data-buy="{bag_data(it)}">Buy now · Cash on delivery</button>'
     hl = "".join(f"<li>{esc(h)}</li>" for h in it["hl"])
     g = it["gender"] if it["gender"] in GENDERS else ""
-    crumbs = f'<a href="../index.html">Home</a> / ' + (f'<a href="{shop_link("../", g=g)}">{esc(g)}</a> / ' if g else "") + f'<a href="{esc(shop_link("../", **({"g": g} if g else {}), cat=it["category"]))}">{esc(it["category"])}</a> / <span>{esc(sku)}</span>'
+    k = kind(it); kp = coll_url("../", kind_page(k)); bp = brand_url("../", it["brand"])
+    crumb_list = [("Home", "index.html")] + ([(g, g_link("", g))] if g else []) + [(k, kind_page(k) + ".html" if kp else shop_link(**({"g": g} if g else {}), cat=it["category"]))]
+    crumbs = " / ".join(f'<a href="../{esc(u)}">{esc(n)}</a>' for n, u in crumb_list) + f' / <span>{esc(sku)}</span>'
+    more = [f'<a href="{kp}">More {esc(k.lower())}</a>' if kp else "", f'<a href="{bp}">More from {esc(it["brand"])}</a>' if bp else "", f'<a href="{g_link("../", g)}">All {esc(g.lower())}</a>' if g else ""]
+    more = "".join(m for m in more if m)
     body = f"""<nav class="crumbs">{crumbs}</nav>
 <section class="pd"><div class="gal"><div class="gal-main" id="gal">{gallery}</div>{f'<div class="gal-th">{thumbs}</div>' if thumbs else ''}</div>
 <div class="info"><div class="ptop"><span class="pbrand">{esc(it['brand'])}</span>{f'<span class="porigin">Brand from {esc(it["origin"])}</span>' if it['origin'] else ''}<button type="button" class="pwish" data-wish="{bag_data(it)}" aria-label="Save to wishlist">{SVG['heart']}</button></div>
@@ -420,20 +534,55 @@ def product_page(it, all_items, n_imgs):
 {f'<p class="save">Retail abroad ~${it["retailUsd"]}. You save {rs(save)}.</p>' if save > 0 else ''}
 {'<p class="soldmsg">This item has been sold. See similar items below or ask us on WhatsApp.</p>' if sold else f'<div class="cta">{buy}<button type="button" class="addbag" data-add="{bag_data(it)}">Add to bag</button></div>{ask}' + offer_box(it)}
 <ul class="perks"><li><b>Cash on delivery</b><span>Pay when the parcel arrives</span></li><li><b>Delivery</b><span>{esc(delivery_line())}</span></li><li><b>Easy exchange</b><span><a href="../returns.html">{CFG.get('returns', {}).get('days', 3)}-day exchange</a> if it doesn't match</span></li><li><b>Bundle &amp; save</b><span>{esc(bundle_line())}</span></li></ul>
-<section class="pdesc"><h2>About this piece</h2>{f'<p class="lead">{esc(it["desc"])}</p>' if it['desc'] else ''}{f'<h3>Highlights</h3><ul class="hl">{hl}</ul>' if hl else ''}{f'<p class="muted">{esc(it["fix"])}</p>' if it['fix'] else ''}</section>
+<section class="pdesc"><h2>About this piece</h2>{f'<p class="lead">{esc(it["desc"])}</p>' if it['desc'] else ''}<p class="muted">{esc(seo_blurb(it))}</p>{f'<h3>Highlights</h3><ul class="hl">{hl}</ul>' if hl else ''}{f'<p class="muted">{esc(it["fix"])}</p>' if it['fix'] else ''}</section>
 {f'<details open><summary>Size &amp; fit</summary><p>Size {esc(it["size"])}{". Measurements: " + esc(meas) if meas else ""}. Compare with a garment you own. <a href="../size-guide.html">Size guide</a>. Questions about size? Ask on WhatsApp and we will measure it for you.</p></details>' if it['size'] else ''}
 <details><summary>Details</summary><dl>{''.join(f'<dt>{esc(k)}</dt><dd>{esc(v)}</dd>' for k, v in details)}<dt>Item code</dt><dd>{esc(sku)}</dd></dl></details>
 <details><summary>Delivery &amp; payment</summary><p>{esc(delivery_line())} Cash on delivery: pay when the parcel arrives. <a href="../shipping.html">More</a></p></details>
 <details><summary>How to order</summary><p>1. Tap "Buy now", or "Add to bag" for several items and check out together.<br>2. Enter your name, phone, city and address.<br>3. Place the order on the site or on WhatsApp; we confirm it.<br>4. Pay when the parcel arrives (COD).</p></details>
-<button class="share" type="button" data-share>Share this item</button></div></section>
+<button class="share" type="button" data-share>Share this item</button>{f'<nav class="pills more" aria-label="More like this">{more}</nav>' if more else ''}</div></section>
 {f'<section class="rel"><h2>You may also like</h2><div class="grid">{"".join(card(o, "../") for o in related)}</div></section>' if related else ''}
 {'' if sold else f'<div class="sticky"><div>{price_html(it, "sp")}<span>{esc(it["brand"])}{" · " + esc(it["size"]) if it["size"] else ""}</span></div><button type="button" class="buy" data-buy="{bag_data(it)}">Buy now</button></div>'}"""
     js = offer_js() + """<script>(function(){var g=document.getElementById('gal'),t=document.querySelectorAll('.gal-th button');t.forEach(function(b){b.onclick=function(){g.scrollTo({left:g.clientWidth*+b.dataset.i,behavior:'smooth'})}});
 g&&g.addEventListener('scroll',function(){var i=Math.round(g.scrollLeft/g.clientWidth);t.forEach(function(b){b.setAttribute('aria-current',+b.dataset.i===i)})},{passive:true});
 var s=document.querySelector('[data-share]');s&&(s.onclick=function(){var d={title:document.title,url:location.href};if(navigator.share)navigator.share(d).catch(function(){});else navigator.clipboard.writeText(location.href).then(function(){s.textContent='Link copied'})})})()</script>"""
     if not sold: js += "<script>TP.seen(%s)</script>" % json.dumps({"sku": sku, "b": it["brand"], "n": it["name"], "p": it["price"], "i": f"img/{sku}-1.jpg" if n_imgs else ""})
-    crumbs_ld = {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": CFG["siteUrl"].rstrip("/") + "/"}, {"@type": "ListItem", "position": 2, "name": it["category"], "item": CFG["siteUrl"].rstrip("/") + "/" + shop_link(**({"g": g} if g else {}), cat=it["category"])}, {"@type": "ListItem", "position": 3, "name": f"{it['brand']} {it['name']}", "item": CFG["siteUrl"].rstrip("/") + f"/p/{sku}.html"}]}
-    return page(f"{it['brand']} {it['name']}{' size ' + it['size'] if it['size'] else ''} | {CFG['storeName']}", it["desc"] or it["title"], body, 1, f"img/{sku}-1.jpg" if n_imgs else None, f"p/{sku}.html", None if sold else wa, js, [product_ld(it, n_imgs), crumbs_ld], og_type="product")
+    base = CFG["siteUrl"].rstrip("/")
+    crumbs_ld = breadcrumb_ld([(n, base + "/" + (u if u != "index.html" else "")) for n, u in crumb_list] + [(full_name(it), f"{base}/p/{sku}.html")])
+    meta = {"product:brand": it["brand"], "product:availability": "out of stock" if sold else "in stock", "product:condition": "used",
+            "product:price:amount": it["price"], "product:price:currency": "PKR", "product:retailer_item_id": sku}
+    return page(product_title(it), product_desc(it), body, 1, f"img/{sku}-1.jpg" if n_imgs else None, f"p/{sku}.html", None if sold else wa, js, [product_ld(it, n_imgs), crumbs_ld], og_type="product", meta=meta, img_alt=alt_text(it))
+
+
+def product_title(it):
+    sz = f" Size {it['size']}" if it["size"] else ""
+    one = KIND_ONE.get(kind(it), "")
+    tail = " – Sold" if it["status"] == "Sold" else f" – {rs(it['price'])}"
+    t = f"{full_name(it)}{sz}{tail} | Pre-loved{' ' + one if one else ''}, Pakistan"
+    return t if len(t) <= 70 else f"{full_name(it)}{sz}{tail} | {CFG['storeName']}"
+
+
+def product_desc(it):
+    who = {"Men": "for men", "Women": "for women", "Kids": "for kids", "Unisex": "unisex"}.get(it["gender"], "")
+    head = " ".join(x for x in [f"Pre-loved {full_name(it)}", who, f"in {it['color'].lower()}" if it["color"] else "", f"size {it['size']}" if it["size"] else ""] if x)
+    if it["status"] == "Sold":
+        return f"{head}. This piece has sold. See similar pre-loved branded {kind(it).lower()} at {CFG['storeName']}, with cash on delivery all over Pakistan."
+    return f"{head}, {it['cond'].lower()}. {rs(it['price'])}, only 1 piece. Cash on delivery all over Pakistan, {CFG.get('returns', {}).get('days', 7)}-day returns."
+
+
+def seo_blurb(it):
+    k = KIND_ONE.get(kind(it), it["category"].lower())
+    brand = "an unbranded piece from our ABCThrift Select pick" if it["brand"] == CFG["houseLabel"] else f"by {it['brand']}" + (f", a brand from {it['origin'].split(' (')[0]}" if it["origin"] else "")
+    return (f"This pre-loved {k} is {brand}. It was hand-picked in Sahiwal, washed and checked, and the photos show the actual item. "
+            f"We deliver all over Pakistan, including Lahore, Karachi, Islamabad, Rawalpindi, Faisalabad and Multan, and you pay cash on delivery.")
+
+
+def breadcrumb_ld(pairs):
+    return {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": n, "name": name, "item": url} for n, (name, url) in enumerate(pairs, 1)]}
+
+
+def brand_url(up, brand):
+    s = slugify(brand)
+    return f"{up}brands/{s}.html" if s in BRANDS else ""
 
 
 def bundle_line():
@@ -483,15 +632,15 @@ def hero_slides(live, v):
         return next((i for i in live if i["images"] and f(i)), None)
     out = []
     spec = [("Winter New Arrivals", "Hand-picked international brands, washed and checked. Only one of each.", "Shop new arrivals", "index.html?sort=new#shop", pic(lambda i: True), "s1"),
-            ("Kids Winter Wear", "Branded jackets, hoodies and snowsuits at low prices.", "Shop kids", shop_link(g="Kids"), pic(lambda i: i["gender"] == "Kids"), "s2"),
-            ("Women's Collection", "Sweaters, cardigans and jackets that fit your budget.", "Shop women", shop_link(g="Women"), pic(lambda i: in_gender(i, "Women")), "s3"),
+            ("Kids Winter Wear", "Branded jackets, hoodies and snowsuits at low prices.", "Shop kids", g_link("", "Kids"), pic(lambda i: i["gender"] == "Kids"), "s2"),
+            ("Women's Collection", "Sweaters, cardigans and jackets that fit your budget.", "Shop women", g_link("", "Women"), pic(lambda i: in_gender(i, "Women")), "s3"),
             (f"Free {rs(v['amount'])} voucher" if v else "Cash on delivery", f"Use code {esc(v['code'])} on your first order. Cash on delivery all over Pakistan." if v else "Pay when the parcel arrives.", "Claim voucher" if v else "Shop now", "#shop", pic(lambda i: i["price"] < 1000) or pic(lambda i: True), "s4")]
     seen = set()
     for t, sub, btn, href, it, cls in spec:
         if it is None and cls != "s4": continue
         if it and it["sku"] in seen and cls in ("s2", "s3"): continue
         if it: seen.add(it["sku"])
-        img = f'<img src="img/{it["sku"]}-1.jpg" alt="" width="600" height="600"{" loading=lazy" if out else ""}>' if it else ""
+        img = f'<img src="img/t/{it["sku"]}-1.jpg" alt="{esc(alt_text(it))}" width="600" height="600"{" loading=lazy decoding=async" if out else " fetchpriority=high"}>' if it else ""
         act = f'<button type="button" class="btn" data-voucher>{btn}</button>' if cls == "s4" and v else f'<a class="btn" href="{esc(href)}">{btn}</a>'
         out.append(f'<div class="slide {cls}"><div class="sl-tx"><p class="eyebrow">{esc(CFG["storeName"])}</p><h2>{esc(t)}</h2><p>{sub}</p>{act}</div><div class="sl-img">{img}</div></div>')
     return "".join(out)
@@ -509,7 +658,7 @@ def index_page(items):
     cats = sorted({i["category"] for i in items}); sizes = [s for s in dict.fromkeys(i["size"] for i in live) if s]
     brands = sorted({i["brand"] for i in live}, key=lambda b: (-sum(i["brand"] == b for i in live), b))
     d = next((i for i in live if i["sku"] == DEAL.get("sku")), None)
-    deal = f"""<section id="deal" class="deal dl"><a class="deal-img" href="p/{esc(d['sku'])}.html">{f'<img src="img/{d["sku"]}-1.jpg" alt="{esc(d["brand"] + " " + d["name"])}" width="600" height="600">' if d['images'] else ''}</a>
+    deal = f"""<section id="deal" class="deal dl"><a class="deal-img" href="p/{esc(d['sku'])}.html">{f'<img src="img/t/{d["sku"]}-1.jpg" alt="{esc(alt_text(d))}" loading="lazy" decoding="async" width="600" height="600">' if d['images'] else ''}</a>
 <div class="deal-tx"><p class="eyebrow">Deal of the Day · extra {CFG['deal']['extraPct']}% off</p><span class="pbrand">{esc(d['brand'])}</span><h2>{esc(d['name'])}</h2>
 <p class="deal-p"><b>{rs(DEAL['price'])}</b><s>{rs(d['price'])}</s></p><p class="deal-t">Ends in <time data-countdown>--:--:--</time></p>
 <div class="cta"><a class="btn" href="p/{esc(d['sku'])}.html">View deal</a><button type="button" class="addbag" data-add="{bag_data(d)}">Add to bag</button></div></div></section>""" if d else ""
@@ -519,7 +668,7 @@ def index_page(items):
         gi = [i for i in live if in_gender(i, g)]
         pic = next((i for i in gi if i["images"]), None)
         if not gi: continue
-        tiles += f'<a class="gtile" href="{shop_link(g=g)}">{f"<img src=img/{pic["sku"]}-1.jpg alt=\"\" loading=lazy width=600 height=600>" if pic else ""}<span><b>{g}</b><em>{len(gi)} pieces</em></span></a>'
+        tiles += f'<a class="gtile" href="{g_link("", g)}">{f"<img src=img/t/{pic["sku"]}-1.jpg alt=\"{esc(g)} thrift clothes\" loading=lazy decoding=async width=600 height=600>" if pic else ""}<span><b>{g}</b><em>{len(gi)} pieces</em></span></a>'
     pills = "".join(f'<a href="{esc(shop_link(cat=c))}">{esc(c)} <em>{sum(i["category"] == c for i in live)}</em></a>' for c in sorted({i["category"] for i in live}))
     conds = "".join(f'<a href="{esc(shop_link(cond=c))}"><b>{esc(c)}</b><span>{esc(COND_NOTE[c])}</span></a>' for c in CONDS if any(i["cond"] == c for i in live))
     slides = hero_slides(live, v)
@@ -543,7 +692,10 @@ def index_page(items):
 <div class="grid" id="grid">{''.join(card(i) for i in items)}</div><p class="empty" id="empty" hidden>Nothing here yet. Try another filter, or ask on WhatsApp and we'll look for it.</p></section>
 {f'<section class="conds"><h2>Shop by condition</h2><div>{conds}</div><a class="o-link" href="condition-guide.html">How we grade condition</a></section>' if conds else ''}
 <section id="how" class="how"><h2>How to order</h2><ol><li><b>Pick your items</b><span>Check the photos and size. Add several items to your bag.</span></li><li><b>Check out</b><span>Enter your name, phone and address, and place the order on the site or on WhatsApp.</span></li><li><b>Pay at your door</b><span>We confirm and dispatch. Pay cash when the parcel arrives.</span></li></ol></section>
-<section class="faqs"><h2>Common questions</h2>{''.join(f'<details><summary>{esc(q)}</summary><p>{a}</p></details>' for q, a in FAQ[:4])}<a class="o-link" href="faq.html">All FAQs</a></section>"""
+<section class="faqs"><h2>Common questions</h2>{''.join(f'<details><summary>{esc(q)}</summary><p>{a}</p></details>' for q, a in FAQ[:4])}<a class="o-link" href="faq.html">All FAQs</a></section>
+{popular_block("")}
+<section class="seo-about"><h2>Online thrift store in Pakistan</h2><p>{esc(CFG['storeName'])} sells pre-loved (used) clothes from international brands at thrift prices. We hand-pick every piece in Sahiwal, Punjab, wash and check it, and list it with real photos, the size and an honest condition grade. You will find branded winter jackets, puffer jackets, coats, hoodies and sweatshirts for men, women and kids, with only one piece of each.</p>
+<p>Order online or on WhatsApp and pay cash on delivery anywhere in Pakistan, including Lahore, Karachi, Islamabad, Rawalpindi, Faisalabad, Multan and Sahiwal. {esc(delivery_line().rstrip('.'))}. Easy returns within {CFG.get('returns', {}).get('days', 7)} days.</p></section>"""
     js = """<script>(function(){var g='All',$=function(i){return document.getElementById(i)},q=$('q'),cat=$('cat'),size=$('size'),cond=$('cond'),sort=$('sort'),sold=$('sold'),mx=$('max'),grid=$('grid'),cards=[].slice.call(grid.children),brand='';
 function setG(v){g=v;document.querySelectorAll('#g button').forEach(function(x){x.setAttribute('aria-pressed',x.dataset.v===v)})}
 function run(){var v=q.value.trim().toLowerCase(),n=0;cards.forEach(function(c){var ok=(!mx.value||+c.dataset.price<=+mx.value)&&(g==='All'||c.dataset.g===g||(g!=='Kids'&&c.dataset.g==='Unisex'))&&(!cat.value||c.dataset.cat===cat.value)&&(!size.value||c.dataset.size===size.value)&&(!cond.value||c.dataset.cond===cond.value)&&(!brand||c.dataset.brand===brand)&&(!v||c.dataset.q.indexOf(v)>-1)&&(sold.checked||!c.classList.contains('is-sold'));c.hidden=!ok;if(ok)n++});
@@ -561,15 +713,107 @@ function fromUrl(){var p=new URLSearchParams(location.search);setG(['Men','Women
  document.querySelectorAll('.brands button').forEach(function(x){x.setAttribute('aria-pressed',!!brand&&x.dataset.brand===brand)});run();if(p.get('find'))setTimeout(function(){q.focus()},300)}
 fromUrl();window.addEventListener('popstate',fromUrl);
 document.addEventListener('click',function(e){var a=e.target.closest('a[href*="#shop"]');if(!a||a.pathname!==location.pathname)return;e.preventDefault();history.pushState(null,'',a.href);fromUrl();var m=$('menu');if(m&&!m.hidden){m.hidden=true;document.body.classList.remove('noscroll')}$('shop').scrollIntoView({behavior:'smooth'})})})()</script>"""
-    org = {"@context": "https://schema.org", "@type": "ClothingStore", "name": CFG["storeName"], "url": CFG["siteUrl"].rstrip("/") + "/", "telephone": "+" + wa_digits(),
+    org = {"@context": "https://schema.org", "@type": "ClothingStore", "@id": CFG["siteUrl"].rstrip("/") + "/#store", "name": CFG["storeName"], "url": CFG["siteUrl"].rstrip("/") + "/", "telephone": "+" + wa_digits(),
+           "description": "Online thrift store for pre-loved international brand clothing, hand-picked in Sahiwal, with cash on delivery all over Pakistan.",
+           "openingHoursSpecification": [{"@type": "OpeningHoursSpecification", "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], "opens": "11:00", "closes": "22:00"}],
            "address": {"@type": "PostalAddress", "addressLocality": "Sahiwal", "addressRegion": "Punjab", "addressCountry": "PK"}, "paymentAccepted": "Cash on delivery", "currenciesAccepted": "PKR",
-           "logo": CFG["siteUrl"].rstrip("/") + "/logo.png", "image": CFG["siteUrl"].rstrip("/") + "/og-image.png", "priceRange": "Rs 500 - Rs 5,000",
+           "logo": CFG["siteUrl"].rstrip("/") + "/logo.png", "image": CFG["siteUrl"].rstrip("/") + "/og-image.png", "priceRange": f"{rs(min(i['price'] for i in live))} - {rs(max(i['price'] for i in live))}" if live else "Rs 400 - Rs 3,000",
            "areaServed": {"@type": "Country", "name": "Pakistan"}}
     sm = [u for u in (CFG.get("social") or {}).values() if u]
     if sm: org["sameAs"] = sm
-    site = {"@context": "https://schema.org", "@type": "WebSite", "name": CFG["storeName"], "url": CFG["siteUrl"].rstrip("/") + "/",
+    site = {"@context": "https://schema.org", "@type": "WebSite", "@id": CFG["siteUrl"].rstrip("/") + "/#website", "name": CFG["storeName"], "url": CFG["siteUrl"].rstrip("/") + "/", "publisher": {"@id": CFG["siteUrl"].rstrip("/") + "/#store"}, "inLanguage": "en-PK",
             "potentialAction": {"@type": "SearchAction", "target": CFG["siteUrl"].rstrip("/") + "/index.html?q={search_term_string}#shop", "query-input": "required name=search_term_string"}}
-    return page(f"{CFG['storeName']} | Thrift store for pre-loved international brands in Pakistan", CFG["tagline"], body, 0, f"img/{live[0]['sku']}-1.jpg" if live and live[0]["images"] else None, "", None, js + SLIDER_JS + index_badges_js(), [org, site])
+    return page(f"{CFG['storeName']} | Thrift Store in Pakistan for Pre-loved Branded Clothes", "Shop pre-loved international brand jackets, puffers, hoodies and sweatshirts online in Pakistan. Hand-picked in Sahiwal, real photos, cash on delivery, " + f"{CFG.get('returns', {}).get('days', 7)}-day returns.", body, 0, f"img/{live[0]['sku']}-1.jpg" if live and live[0]["images"] else None, "", None, js + SLIDER_JS + index_badges_js(), [org, site])
+
+
+# ---------- SEO landing pages ----------
+def popular_block(up, skip=""):
+    links = "".join(f'<a href="{up}{c}.html">{esc(h)} <em>{n}</em></a>' for c, h, n in COLL if c != skip)
+    brands = "".join(f'<a href="{up}brands/{b}.html">{esc(n)}</a>' for b, n in sorted(BRANDS.items(), key=lambda x: x[1].lower()))
+    if not links and not brands: return ""
+    return (f'<section class="popular"><h2>Popular in our store</h2><nav class="pills" aria-label="Popular searches">{links}</nav>'
+            + (f'<h3>Shop by brand</h3><nav class="pills" aria-label="Brands">{brands}<a href="{up}brands.html">All brands</a></nav>' if brands else "") + "</section>")
+
+
+def top_brands(items, n=5):
+    names = [i["brand"] for i in items if i["brand"] != CFG["houseLabel"]]
+    seen = sorted(dict.fromkeys(names), key=lambda b: -names.count(b))
+    return ", ".join(seen[:n]) or "international labels"
+
+
+def list_page(slug, h1, title, desc, intro, its, depth, crumbs_extra=(), filter_q=None, skip=""):
+    """A crawlable landing page: unique heading and intro, the matching items, links to related pages, CollectionPage + ItemList schema."""
+    up = "../" * depth; base = CFG["siteUrl"].rstrip("/")
+    live = [i for i in its if i["status"] != "Sold"]; sold = [i for i in its if i["status"] == "Sold"][:8]
+    sizes = [s for s in dict.fromkeys(i["size"] for i in live) if s]
+    intro = intro.format(brands=top_brands(live), sizes=", ".join(sizes[:8]) or "all sizes")
+    prices = [i["price"] for i in live]
+    facts = f"{len(live)} piece{'s' if len(live) != 1 else ''} in stock" + (f", from {rs(min(prices))} to {rs(max(prices))}" if prices else "") + ". Cash on delivery all over Pakistan."
+    url = base + "/" + slug
+    crumbs = [("Home", base + "/")] + list(crumbs_extra) + [(h1, url)]
+    crumb_html = " / ".join(f'<a href="{up}{esc(u[len(base) + 1:]) or "index.html"}">{esc(n)}</a>' for n, u in crumbs[:-1]) + f" / <span>{esc(h1)}</span>"
+    filt = f'<p><a class="o-link" href="{esc(shop_link(up, **filter_q))}">Filter by size, price and condition</a></p>' if filter_q else ""
+    body = f"""<section class="shop coll"><nav class="crumbs">{crumb_html}</nav><h1>{esc(h1)}</h1><p class="lead">{esc(intro)}</p><p class="muted">{esc(facts)}</p>{filt}
+<div class="grid">{''.join(card(i, up) for i in live)}</div>
+{f'<h2>Recently sold</h2><p class="muted">These have found a new home. New stock is added every week.</p><div class="grid">{"".join(card(i, up) for i in sold)}</div>' if sold else ''}</section>
+{popular_block(up, skip)}"""
+    ld = [{"@context": "https://schema.org", "@type": "CollectionPage", "name": h1, "url": url, "description": desc, "isPartOf": {"@id": base + "/#website"},
+           "mainEntity": {"@type": "ItemList", "numberOfItems": len(live), "itemListElement": [{"@type": "ListItem", "position": n, "url": f"{base}/p/{i['sku']}.html", "name": full_name(i)} for n, i in enumerate(live, 1)]}},
+          breadcrumb_ld(crumbs)]
+    img = next((f"img/{i['sku']}-1.jpg" for i in live if i["images"]), None)
+    return page(f"{title} | {CFG['storeName']}", desc, body, depth, img, slug, None, index_badges_js(), ld, img_alt=h1)
+
+
+def brand_pages(items):
+    out = {}
+    for b, name in BRANDS.items():
+        its = [i for i in items if slugify(i["brand"]) == b]
+        desc = f"Shop pre-loved {name} clothes online in Pakistan: {', '.join(sorted({KIND_ONE.get(kind(i), i['category'].lower()) + 's' for i in its}))}. Real photos, cash on delivery, {CFG.get('returns', {}).get('days', 7)}-day returns."
+        intro = (f"Pre-loved {name} pieces, hand-picked in Sahiwal and checked by hand. Each item carries its own {name} label, and we can send a photo of the label on WhatsApp. "
+                 "There is only one of each, so order before someone else does.")
+        out[b] = list_page(f"brands/{b}.html", f"{name} in Pakistan", f"{name} Pakistan | Pre-loved {name} Clothes", desc, intro, its, 1,
+                           [("All brands", CFG["siteUrl"].rstrip("/") + "/brands.html")], {"brand": name})
+    return out
+
+
+def brands_index(items):
+    live = [i for i in items if i["status"] != "Sold"]
+    groups = {}
+    for i in live:
+        if i["brand"] != CFG["houseLabel"]: groups.setdefault(slugify(i["brand"]), []).append(i)
+    rows = ""
+    for sl, its in sorted(groups.items(), key=lambda x: (BRANDS.get(x[0]) or x[1][0]["brand"]).lower()):
+        n = BRANDS.get(sl) or next((i["brand"] for i in its if not i["brand"].isupper()), its[0]["brand"])
+        rows += f'<a href="{f"brands/{sl}.html" if sl in BRANDS else esc(shop_link(brand=its[0]["brand"]))}"><b>{esc(n)}</b><span>{len(its)} in stock</span></a>'
+    house = sum(i["brand"] == CFG["houseLabel"] for i in live)
+    if house: rows += f'<a href="{esc(shop_link(brand=CFG["houseLabel"]))}"><b>{esc(CFG["houseLabel"])}</b><span>{house} unbranded picks</span></a>'
+    names = list(groups)
+    body = f'<section class="infop"><nav class="crumbs"><a href="index.html">Home</a> / <span>Brands</span></nav><h1>Shop by brand</h1><p class="lead">Pre-loved clothes from {len(names)} international brands, hand-picked in Sahiwal. Cash on delivery all over Pakistan.</p><div class="brandlist">{rows}</div></section>'
+    base = CFG["siteUrl"].rstrip("/")
+    return page(f"Brands | Pre-loved Branded Clothes Pakistan | {CFG['storeName']}", f"Shop pre-loved clothes by brand: {top_brands(live, 8)} and more. Cash on delivery all over Pakistan.", body, 0, None, "brands.html",
+                ld=[breadcrumb_ld([("Home", base + "/"), ("Brands", base + "/brands.html")])])
+
+
+def feed_xml(items, counts):
+    """Product feed (RSS 2.0, Google namespace) for Google Merchant Center free listings and the Facebook / Instagram shop catalog."""
+    base = CFG["siteUrl"].rstrip("/"); x = lambda s: html.escape(str(s or ""), quote=False)
+    out = ['<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0"><channel>',
+           f"<title>{x(CFG['storeName'])}</title><link>{base}/</link><description>{x(CFG['tagline'])}</description>"]
+    for i in items:
+        n = counts.get(i["sku"], 0)
+        if not n: continue
+        g = {"Men": "male", "Women": "female"}.get(i["gender"], "unisex")
+        imgs = [f"{base}/img/{i['sku']}-{k}.jpg" for k in range(1, n + 1)]
+        f = [("g:id", i["sku"]), ("g:title", clip(f"{full_name(i)}{' Size ' + i['size'] if i['size'] else ''}", 150)), ("g:description", clip(" ".join(x for x in (i["desc"], seo_blurb(i)) if x), 4900)),
+             ("g:link", f"{base}/p/{i['sku']}.html"), ("g:image_link", imgs[0])] + [("g:additional_image_link", u) for u in imgs[1:10]] + [
+             ("g:availability", "out_of_stock" if i["status"] == "Sold" else "in_stock"), ("g:price", f"{i['price']:.2f} PKR"), ("g:condition", "used"),
+             ("g:brand", i["brand"]), ("g:identifier_exists", "no"), ("g:google_product_category", "1604"), ("g:product_type", f"{i['gender'] or 'Unisex'} > {kind(i)}"),
+             ("g:gender", g), ("g:age_group", "kids" if i["gender"] == "Kids" else "adult"), ("g:color", i["color"]), ("g:size", i["size"]),
+             ("g:shipping", None)]
+        fee = 0 if (CFG.get("delivery") or {}).get("freeOver") and i["price"] >= CFG["delivery"]["freeOver"] else (CFG.get("delivery") or {}).get("fee", 0)
+        row = "".join(f"<{k}>{x(v)}</{k}>" for k, v in f if v not in (None, ""))
+        out.append(f"<item>{row}<g:shipping><g:country>PK</g:country><g:price>{fee:.2f} PKR</g:price></g:shipping></item>")
+    return "\n".join(out + ["</channel></rss>"]) + "\n"
 
 
 # ---------- info pages ----------
@@ -592,6 +836,8 @@ def _faq():
         ("How do I order?", "Tap \"Buy now\" or \"Add to bag\", then enter your name, phone and address at checkout. Place the order on the site or on WhatsApp and we confirm it."),
         ("Any discounts or vouchers?", esc(bundle_line()) + "." + (f" {rs(v['amount'])} off your first order of {rs(v['minOrder'])}+ with code {esc(v['code'])}." if v else "")),
         ("Can you send more photos or a video?", "Yes. Send the item code on WhatsApp and we'll send more photos, a video or measurements."),
+        ("Are the brands original?", "Branded items carry their own brand labels, and we photograph the label of every piece. Ask on WhatsApp and we will send you the label photo before you order. Pieces without a known brand are listed as " + esc(CFG["houseLabel"]) + "."),
+        ("Where are you based and where do you deliver?", "We are an online thrift store in " + esc(CFG.get("city", "Pakistan")) + ". We deliver all over Pakistan, including Lahore, Karachi, Islamabad, Rawalpindi, Faisalabad and Multan, with cash on delivery."),
         ("How do I track my order?", "Enter your order number on <a href=\"track.html\">Track your order</a>, or send it to us on WhatsApp. We also send a tracking number after dispatch."),
     ]
 
@@ -696,8 +942,19 @@ def main(items_dir, assets_dir):
     items = load_items(items_dir)
     tmp = ROOT / "public.new"; shutil.rmtree(tmp, ignore_errors=True); (tmp / "img").mkdir(parents=True); (tmp / "p").mkdir()
     counts, report = {}, {}
+    try: OLD_REPORT = json.loads((OUT / "photo-report.json").read_text())
+    except (OSError, ValueError): OLD_REPORT = {}
     for it in items:
         n = 0; issues = []; it["ai_idx"] = set()
+        have = [a for a in it["images"] if (Path(assets_dir) / f"{a}.jpg").exists()]
+        live_imgs = sorted(OUT.glob(f"img/{it['sku']}-*.jpg"), key=lambda p: int(p.stem.rsplit("-", 1)[1]))
+        if not have and live_imgs:
+            # No new photos for this item in assets_dir: keep the photos already on the site, so a text/SEO rebuild never drops them.
+            for p in live_imgs:
+                n += 1; shutil.copy(p, tmp / "img" / f"{it['sku']}-{n}.jpg")
+            counts[it["sku"]] = n; it["n_imgs"] = n
+            if it["status"] != "Sold" and it["sku"] in OLD_REPORT: report[it["sku"]] = OLD_REPORT[it["sku"]]
+            continue
         for aid in it["images"]:
             src = Path(assets_dir) / f"{aid}.jpg"
             if not src.exists() and not (CACHE / f"{aid}.png").exists(): continue
@@ -711,6 +968,9 @@ def main(items_dir, assets_dir):
         counts[it["sku"]] = n; it["n_imgs"] = n
         if issues and it["status"] != "Sold": report[it["sku"]] = issues
         if not n: it["images"] = []
+    (tmp / "img" / "t").mkdir()
+    for f in (tmp / "img").glob("*.jpg"):  # 600px copies for cards, thumbnails and the home page (much lighter on mobile data)
+        im = Image.open(f); im.thumbnail((600, 600), Image.LANCZOS); im.save(tmp / "img" / "t" / f.name, quality=80, optimize=True, progressive=True)
     day = datetime.now(timezone.utc) + timedelta(hours=5)
     for it in items:
         try: it["fresh"] = (day - datetime.fromisoformat(str(it["created"]).replace("Z", "+00:00"))).days < 7
@@ -718,16 +978,35 @@ def main(items_dir, assets_dir):
     live = [i for i in items if i["status"] != "Sold"]
     NAV.clear(); NAV.update({g: sorted({i["category"] for i in live if in_gender(i, g)}) for g in GENDERS})
     FAQ[:] = _faq()
+    COLL.clear(); BRANDS.clear()
+    for c in COLLECTIONS:
+        n = sum(1 for i in live if c[5](i))
+        if n: COLL.append((c[0], c[1], n))
+    for b in {i["brand"] for i in items if i["brand"] != CFG["houseLabel"]}:
+        if sum(slugify(i["brand"]) == slugify(b) for i in items) >= 2 and any(slugify(i["brand"]) == slugify(b) for i in live):
+            names = [i["brand"] for i in items if slugify(i["brand"]) == slugify(b)]
+            BRANDS[slugify(b)] = next((n for n in names if not n.isupper()), names[0])  # "Bershka" over "BERSHKA"
     pick = sorted((i for i in items if i["status"] == "Listed" and counts[i["sku"]]), key=lambda i: i["sku"])
     DEAL.clear()
     if pick and CFG.get("deal"):
         d = pick[day.toordinal() % len(pick)]; DEAL.update(sku=d["sku"], price=deal_price(d), day=day.strftime("%Y-%m-%d"))
     for it in items: (tmp / "p" / f"{it['sku']}.html").write_text(product_page(it, items, counts[it["sku"]]))
     (tmp / "index.html").write_text(index_page(items))
+    built = [c for c in COLLECTIONS if any(x[0] == c[0] for x in COLL)]
+    for slug, h1, title, desc, intro, fn in built:
+        its = [i for i in items if fn(i)]
+        g = next((g for g in GENDERS if slug == gender_page(g)), None)
+        fq = {"g": g} if g else ({"max": 999} if slug == "under-1000" else None)
+        (tmp / f"{slug}.html").write_text(list_page(f"{slug}.html", h1, title, desc, intro, its, 0, filter_q=fq, skip=slug))
+    if BRANDS:
+        (tmp / "brands").mkdir()
+        for b, html_ in brand_pages(items).items(): (tmp / "brands" / f"{b}.html").write_text(html_)
+        (tmp / "brands.html").write_text(brands_index(items))
+    (tmp / "feed.xml").write_text(feed_xml(items, counts))
     for slug, (title, lead, html_) in info_pages().items():
         extra = TRACK_JS if slug == "track" else ""
         faq_ld = [{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": re.sub(r"<[^>]+>", "", a)}} for q, a in FAQ]}] if slug == "faq" else None
-        (tmp / f"{slug}.html").write_text(page(f"{title} | {CFG['storeName']}", lead, f'<section class="infop"><nav class="crumbs"><a href="index.html">Home</a> / <span>{esc(title)}</span></nav><h1>{esc(title)}</h1><p class="lead">{esc(lead)}</p>{html_}</section>', 0, None, f"{slug}.html", None, extra, faq_ld, noindex=slug in NOINDEX))
+        (tmp / f"{slug}.html").write_text(page(f"{title} | {CFG['storeName']}", f"{lead} {CFG['storeName']}: pre-loved branded clothes with cash on delivery all over Pakistan.", f'<section class="infop"><nav class="crumbs"><a href="index.html">Home</a> / <span>{esc(title)}</span></nav><h1>{esc(title)}</h1><p class="lead">{esc(lead)}</p>{html_}</section>', 0, None, f"{slug}.html", None, extra, faq_ld, noindex=slug in NOINDEX))
     (tmp / "wishlist.html").write_text(page(f"Wishlist | {CFG['storeName']}", "Your saved items.", WISH_BODY, 0, None, "wishlist.html", None,
         WISH_JS + SVG["heart"].replace("'", "\\'") + """</button></article>'}).join('')})()</script>""", noindex=True))
     (tmp / "photo-report.json").write_text(json.dumps(report, ensure_ascii=False, indent=1))
@@ -737,8 +1016,11 @@ def main(items_dir, assets_dir):
     if promo.is_dir(): shutil.copytree(promo, tmp / "promo")
     (tmp / "404.html").write_text(page(f"Not found | {CFG['storeName']}", CFG["tagline"], '<section class="nf"><h1>This page or item is no longer available</h1><p>Take a look at our other items.</p><a class="btn" href="/">Visit the store</a></section>', noindex=True, root="/"))
     base = CFG["siteUrl"].rstrip("/")
-    (tmp / "sitemap.xml").write_text(sitemap(base, [("", day.strftime("%Y-%m-%d"), [])] + [(f"{s}.html", "", []) for s, _ in INFO if s not in NOINDEX] +
-        [(f"p/{i['sku']}.html", str(i["created"])[:10], [f"{base}/img/{i['sku']}-{n}.jpg" for n in range(1, counts[i["sku"]] + 1)]) for i in items]))
+    newest = lambda its: max((str(i["updated"])[:10] for i in its), default="")
+    coll_rows = [(f"{slug}.html", newest([i for i in items if fn(i)]), []) for slug, _, _, _, _, fn in built]
+    brand_rows = [(f"brands/{b}.html", newest([i for i in items if slugify(i["brand"]) == b]), []) for b in BRANDS] + ([("brands.html", newest(items), [])] if BRANDS else [])
+    (tmp / "sitemap.xml").write_text(sitemap(base, [("", day.strftime("%Y-%m-%d"), [])] + coll_rows + brand_rows + [(f"{s}.html", "", []) for s, _ in INFO if s not in NOINDEX] +
+        [(f"p/{i['sku']}.html", str(i["updated"])[:10], [f"{base}/img/{i['sku']}-{n}.jpg" for n in range(1, counts[i["sku"]] + 1)]) for i in items]))
     for f in ("logo.png", "og-image.png"):
         if (Path(__file__).parent / f).exists(): shutil.copy(Path(__file__).parent / f, tmp / f)
     (tmp / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: {base}/sitemap.xml\n")
