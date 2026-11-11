@@ -174,3 +174,18 @@ html,body{overflow-x:clip}
 .ci img,.gal-main img,.deal-img img{aspect-ratio:4/5;object-fit:contain;background:#f4f2ee}
 .ci .b-ai{position:absolute;top:44px;left:10px;background:rgba(21,32,29,.82);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;letter-spacing:.02em}
 .gal-main .gai{flex:0 0 100%;position:relative;margin:0;scroll-snap-align:start}.gal-main .gai img{width:100%}.gai .b-ai{position:absolute;top:12px;left:12px;background:rgba(21,32,29,.82);color:#fff;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}
+.coll h1{font-size:clamp(26px,4.5vw,38px);letter-spacing:-.03em;margin:6px 0 10px}
+.coll .lead{max-width:760px;margin-bottom:6px}
+.coll h2{font-size:22px;margin:36px 0 4px}
+.coll .grid{margin-top:16px}
+.popular{margin:40px 0 10px}
+.popular h2{font-size:22px;letter-spacing:-.02em}
+.popular h3{font-size:15px;margin:6px 0 8px;color:var(--muted)}
+.pills.more{margin:18px 0 0;flex-wrap:wrap}
+.seo-about{max-width:760px;margin:30px 0 40px;font-size:14.5px;line-height:1.65;color:#3b4542}
+.seo-about h2{font-size:20px;color:var(--ink)}
+.brandlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin:18px 0}
+.brandlist a{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;text-decoration:none;display:grid;gap:2px}
+.brandlist a span{font-size:13px;color:var(--muted)}
+.brandlist a:hover{border-color:var(--ink)}
+.popular .pills{flex-wrap:wrap;overflow:visible}
