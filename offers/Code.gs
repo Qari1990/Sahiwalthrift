@@ -15,16 +15,19 @@
  *   Items   one row per item that got an offer. "reserve" is your hidden lowest price
  *           (default 75% of the listed price); set "state" to "sold" when it sells elsewhere.
  */
-const VERSION = "2026-11-11";
+const VERSION = "2026-11-11b";
 const SITE = "https://abcthrift.store";
 const SITES = [SITE, "https://www.abcthrift.store", "https://qari1990.github.io/Sahiwalthrift", "http://abcthrift.store"]; // fallbacks if HTTPS is not ready yet
 const STORE = "ABCThrift";
 const WHATSAPP = "923114139007";
 const MIN_PCT = 0.6;       // offers below 60% of the price are refused
-const RESERVE_PCT = 0.75;  // a 48-hour winner must reach this unless you change "reserve"
-const WINDOW_H = 48;       // bidding window, counted from the first offer
+const RESERVE_PCT = 0.75;  // a winning offer must reach this unless you change "reserve"
+const WINDOW_H = 24;       // bidding window, counted from the first offer
+const HOLD_H = 24;         // a won offer holds the item this long; not sold by then = back on sale at the normal price
 const COUNTER_H = 24;      // a counter offer is valid this long
 const STEP = 50;           // a new offer must beat the highest by at least this much
+const DELIVERY_FEE = 250;  // must match site.json "delivery"
+const FREE_OVER = 2000;    // free delivery when goods (after discounts) reach this
 
 const OFFER_COLS = ["at", "sku", "name", "phone", "amount", "status", "counter", "counterAt", "note"];
 const ITEM_COLS = ["sku", "title", "price", "reserve", "firstAt", "endsAt", "state", "winnerPhone", "winnerAmount"];
@@ -118,7 +121,7 @@ function state(sku) {
   const top = live.reduce((m, o) => Math.max(m, +o.amount || 0), 0);
   const st = c.status === "Sold" || (it && it.state === "sold") ? "sold" : it && it.state === "won" ? "won" : "open";
   return { sku, price: c.price, minOffer: Math.ceil(c.price * MIN_PCT / 50) * 50, highest: top, count: live.length,
-    endsAt: it && it.endsAt ? ms(it.endsAt) : 0, state: st, step: STEP, windowH: WINDOW_H };
+    endsAt: it && it.endsAt ? ms(it.endsAt) : 0, state: st, step: STEP, windowH: WINDOW_H, holdH: HOLD_H };
 }
 function allStates() {
   const out = {};
@@ -144,7 +147,7 @@ function makeOffer(p) {
   if (!it.firstAt) { it.firstAt = now; it.endsAt = new Date(now.getTime() + WINDOW_H * 3600e3); put("Items", ITEM_COLS, it); }
   add("Offers", OFFER_COLS, { at: now, sku: p.sku, name, phone, amount, status: "new" });
   notify(`Nayi offer: ${c.title} (${p.sku})`, `${name} (${phone}) ne Rs ${amount} offer kiye. Listed price Rs ${c.price}.\nCounter dene ke liye Offers sheet mein "counter" column mein amount likhein.\nWhatsApp: ${waLink(phone)}`);
-  return Object.assign(state(p.sku), { ok: true, message: `Offer received: Rs ${amount}. The highest offer after ${WINDOW_H} hours wins the item, unless someone buys it at full price first.` });
+  return Object.assign(state(p.sku), { ok: true, message: `Offer received: Rs ${amount}. The highest offer after ${WINDOW_H} hours wins the item, unless someone buys it at full price first. The winner then has ${HOLD_H} hours to complete the order.` });
 }
 
 function mine(sku, phone) {
@@ -167,15 +170,33 @@ function acceptCounter(sku, phone) {
 }
 
 function win(sku, o) {
-  const it = itemRow(sku, true); it.state = "won"; it.winnerPhone = o.phone; it.winnerAmount = o.amount; put("Items", ITEM_COLS, it);
+  const it = itemRow(sku, true); it.state = "won"; it.winnerPhone = o.phone; it.winnerAmount = o.amount; it.endsAt = new Date(Date.now() + HOLD_H * 3600e3); put("Items", ITEM_COLS, it);
   offers().forEach((x) => { if (x.sku === sku && x._row !== o._row && ["new", "countered"].includes(x.status)) { x.status = "lost"; put("Offers", OFFER_COLS, x); } });
-  notify(`Deal final: ${it.title} (${sku}) Rs ${o.amount}`, `${o.name} (${o.phone}) ki offer final hui: Rs ${o.amount}.\nWhatsApp par address confirm karein: ${waLink(o.phone)}\nTool mein item ko Reserved / Sold kar dein.`);
+  notify(`Deal final: ${it.title} (${sku}) Rs ${o.amount}`, `${o.name} (${o.phone}) ki offer final hui: Rs ${o.amount}.\nWhatsApp par address confirm karein: ${waLink(o.phone)}\nTool mein item ko Reserved / Sold kar dein. ${HOLD_H} ghante mein Sold / Reserved na hua to item wapas normal price par sale par aa jayega.`);
 }
 
-/* ---------- 48-hour close (hourly trigger + every request) ---------- */
+/* ---------- offer window close + 24-hour hold expiry (hourly trigger + every request) ---------- */
+function soldNow(sku) {
+  const c = catalog()[sku];
+  if (c && c.status === "Sold") return "sold";
+  if (c && c.status === "Reserved") return "reserved";
+  return orders().some((o) => !/cancel/i.test(o.status) && String(o.items).indexOf("[" + sku + "]") > -1) ? "ordered" : "";
+}
+function reopen(it) {
+  const w = { phone: it.winnerPhone, amount: it.winnerAmount };
+  offers().forEach((x) => { if (x.sku === it.sku && ["new", "countered", "won"].includes(x.status)) { x.status = "expired"; put("Offers", OFFER_COLS, x); } });
+  it.state = "open"; it.firstAt = ""; it.endsAt = ""; it.winnerPhone = ""; it.winnerAmount = ""; put("Items", ITEM_COLS, it);
+  notify(`Offer expire: ${it.title} (${it.sku}) wapas normal price par`, `${w.phone} ki Rs ${w.amount} wali offer ${HOLD_H} ghante mein complete nahi hui (item Sold / Reserved nahi hua), is liye item wapas website par normal price ${rs(it.price)} par hai aur nayi offers khul gayi hain.`);
+}
 function closeExpired() {
   const now = Date.now();
   items().forEach((it) => {
+    if (it.state === "won" && it.endsAt && ms(it.endsAt) <= now) {
+      const s = soldNow(it.sku);
+      if (s === "sold" || s === "ordered") { it.state = "sold"; put("Items", ITEM_COLS, it); }
+      else if (!s) reopen(it);
+      return;
+    }
     if (it.state !== "open" || !it.endsAt || ms(it.endsAt) > now) return;
     const c = catalog()[it.sku];
     if (c && c.status === "Sold") { it.state = "sold"; put("Items", ITEM_COLS, it); return; }
@@ -214,7 +235,9 @@ function placeOrder(p) {
   const d = Utilities.formatDate(new Date(), "Asia/Karachi", "yyMMdd");
   const no = "AT-" + d + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
   const lines = list.map((i) => `${i.b || ""} ${i.n || ""}${i.s ? " (size " + i.s + ")" : ""} [${i.sku}] ${rs(i.price)}`);
-  const o = { at: new Date(), no, status: "New", name, phone, email, city, address, note, items: lines.join("\n"), subtotal: +p.subtotal || 0, discount: +p.discount || 0, delivery: +p.delivery || 0, total: +p.total || 0, updated: new Date() };
+  const subtotal = +p.subtotal || 0, discount = +p.discount || 0, goods = Math.max(0, subtotal - discount);
+  const delivery = goods >= FREE_OVER ? 0 : DELIVERY_FEE; // same rule as the website, so the sheet and emails always match it
+  const o = { at: new Date(), no, status: "New", name, phone, email, city, address, note, items: lines.join("\n"), subtotal, discount, delivery, total: goods + delivery, updated: new Date() };
   add("Orders", ORDER_COLS, o);
   const wa = waLink(phone, `Hi ${name}! ${STORE} here. We received your order ${no} (${rs(o.total)}). Please reply "Yes" to confirm.`);
   notify(`Naya order ${no}: ${rs(o.total)} (${city})`, `${name}\n${phone}${email ? "\n" + email : ""}\n${city}\n${address}${note ? "\nNote: " + note : ""}\n\n${o.items}\n\nSubtotal ${rs(o.subtotal)}\nDiscount -${rs(o.discount)}\nDelivery ${rs(o.delivery)}\nTotal ${rs(o.total)} (COD)\n\nCustomer ko confirm karein: ${wa}\nStatus badalne ke liye Orders sheet mein "status" column badlein.`);

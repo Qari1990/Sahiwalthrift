@@ -8,7 +8,7 @@ Photos get their background removed (rembg) and are placed on a soft solid
 colour picked from the garment. Cut-outs are cached in cache/ by asset id, so
 only new photos are processed on later runs.
 """
-import colorsys, html, json, os, re, shutil, sys, urllib.parse
+import colorsys, hashlib, html, json, os, re, shutil, sys, urllib.parse
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -207,7 +207,12 @@ def load_items(items_dir):
 
 # ---------- pages ----------
 CSS = (Path(__file__).parent / "store.css").read_text()
-SITE_JS = "<script>" + (Path(__file__).parent / "site.js").read_text() + "</script>"
+JS = (Path(__file__).parent / "site.js").read_text()
+# Shared CSS / JS are separate files named by content hash: the browser downloads them once and reuses them on
+# every page (they used to be inlined, ~45 KB extra on every page view), and a new build always loads fresh copies.
+_h = lambda t: hashlib.sha1(t.encode()).hexdigest()[:10]
+CSS_FILE = f"store.{_h(CSS)}.css"; JS_FILE = f"site.{_h(JS)}.js"
+ZOOM_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15.5 15.5 21 21M10.5 7.5v6M7.5 10.5h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
 ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .1-3.3-.9-2.8-1.2-4.5-4.1-4.7-4.3-.1-.2-1.1-1.5-1.1-2.9s.7-2 1-2.3c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.9 2.1c.1.2.1.4 0 .5l-.4.6-.4.4c-.1.2-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.4 2.4 1.5.3.1.5.1.6-.1l.9-1.1c.2-.3.4-.2.7-.1l2 1c.3.1.5.2.5.3.1.2.1.7-.1 1.3Z"/></svg>'
 SVG = {
     "bag": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l1 13H5L6 7Zm3 0a3 3 0 0 1 6 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
@@ -368,7 +373,7 @@ def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra=""
 <meta property="og:url" content="{esc(base_url)}"><meta property="og:locale" content="en_PK"><meta property="og:image" content="{esc(og_img)}"><meta property="og:image:alt" content="{esc(img_alt or title)}">{extra_meta}
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="{esc(title)}"><meta name="twitter:description" content="{esc(clip(desc, 200))}"><meta name="twitter:image" content="{esc(og_img)}"><meta name="theme-color" content="#15201d">{f'<meta name="google-site-verification" content="{esc(CFG["googleVerification"])}">' if CFG.get("googleVerification") else ''}
 <link rel="icon" href="{up}favicon.svg"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" as="style" href="{FONTS}" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="{FONTS}"></noscript><style>{CSS}</style>{ld_tags}
+<link rel="preload" as="style" href="{FONTS}" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="{FONTS}"></noscript><link rel="stylesheet" href="{up}assets/{CSS_FILE}">{ld_tags}
 <script>window.TP={json.dumps(tp).replace("</", "<\\/")};</script></head><body>
 <div class="topbar"><div class="ann" id="ann">{''.join(f'<span{" class=on" if not i else ""}>{esc(a)}</span>' for i, a in enumerate(ann))}</div>{f'<button type="button" class="tb-v" data-voucher>Free {rs(v["amount"])} voucher</button>' if v else ''}</div>
 <header class="hd"><button type="button" class="hd-ic hd-menu" data-menu-open aria-label="Open menu">{SVG['menu']}</button>
@@ -409,7 +414,7 @@ def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra=""
 <div class="co-done" id="co-done" hidden></div></div></aside>
 <div class="pop" id="pop" hidden><div class="pop-in" role="dialog" aria-label="Free voucher"><button type="button" class="pop-x" data-pop-close aria-label="Close">×</button>
 <p class="eyebrow">Welcome gift</p><h3 id="pop-h"></h3><p id="pop-p"></p><div class="pop-code" id="pop-code" hidden></div><button type="button" class="btn" id="pop-go">Claim free voucher</button></div></div>
-{SITE_JS}{extra}</body></html>"""
+<script src="{up}assets/{JS_FILE}"></script>{extra}</body></html>"""
 
 
 def bag_data(it):
@@ -443,13 +448,16 @@ def card(it, up=""):
 {'' if sold else f'<button type="button" class="cadd" data-add="{bag_data(it)}" aria-label="Add {esc(it["name"])} to bag">+</button>'}</article>"""
 
 
+OFFER_H = (CFG.get("offers") or {}).get("hours", 24); HOLD_H = (CFG.get("offers") or {}).get("holdHours", 24)  # must match WINDOW_H / HOLD_H in offers/Code.gs
+
+
 def offer_box(it):
     mn = -(-int(it["price"] * .6) // 50) * 50
     if not (CFG.get("apiUrl") or CFG.get("offersUrl")):
         msg = urllib.parse.quote(f"Hi! My offer for {it['title']} ({it['sku']}): Rs ")
         return f'<a class="offer-btn" href="https://wa.me/{wa_digits()}?text={msg}" target="_blank" rel="noopener">Make an offer</a>'
     return f"""<section class="offer" id="offer" data-sku="{esc(it['sku'])}" data-price="{it['price']}" data-min="{mn}">
-<div class="o-hd"><div><b>Make an offer</b><span class="o-sub" id="o-sub">Name your price. 48 hours after the first offer, the highest offer wins the item, unless someone buys it at full price first.</span></div><span class="o-timer" id="o-timer" hidden></span></div>
+<div class="o-hd"><div><b>Make an offer</b><span class="o-sub" id="o-sub">Name your price. {OFFER_H} hours after the first offer, the highest offer wins the item, unless someone buys it at full price first. The winner has {HOLD_H} hours to complete the order, otherwise the item goes back to its normal price.</span></div><span class="o-timer" id="o-timer" hidden></span></div>
 <div class="o-stats"><div><span>Highest offer</span><b id="o-top">-</b></div><div><span>Offers</span><b id="o-count">0</b></div><div><span>Min offer</span><b id="o-min">{rs(mn)}</b></div></div>
 <form id="o-form" class="o-form"><label>Your offer (Rs)<input name="amount" type="number" inputmode="numeric" min="{mn}" max="{it['price'] - 1}" required placeholder="{mn}"></label>
 <label>Name<input name="name" required maxlength="40" autocomplete="name"></label>
@@ -508,7 +516,7 @@ def product_page(it, all_items, n_imgs):
     alt = it["brand"] + " " + it["name"]
     ai = it.get("ai_idx", set())
     gimg = lambda i, s: f'<img src="{s}" alt="{esc(alt_text(it, i + 1))}{" (AI preview)" if i + 1 in ai else ""}" width="1200" height="1200"{" loading=lazy decoding=async" if i else " fetchpriority=high"}>'
-    gallery = "".join(f'<figure class="gai">{gimg(i, s)}{AI_BADGE}</figure>' if i + 1 in ai else gimg(i, s) for i, s in enumerate(imgs))
+    gallery = "".join(f'<figure class="gi{" gai" if i + 1 in ai else ""}" data-i="{i}">{gimg(i, s)}{AI_BADGE if i + 1 in ai else ""}</figure>' for i, s in enumerate(imgs))
     thumbs = "".join(f'<button type="button" data-i="{i}" aria-label="Photo {i + 1}"{" aria-current=true" if not i else ""}><img src="{s.replace("/img/", "/img/t/")}" alt="" loading="lazy" width="80" height="80"></button>' for i, s in enumerate(imgs)) if len(imgs) > 1 else ""
     details = [("Brand", it["brand"]), ("Brand origin", it["origin"]), ("Category", it["category"]), ("For", it["gender"]), ("Size", it["size"]), ("Colour", it["color"])] + [(s["label"], s["value"]) for s in it["specs"] if s["label"].lower() not in ("brand", "size", "color", "colour", "gender", "category")]
     seen = set(); details = [(k, v) for k, v in details if v and not (k.lower() in seen or seen.add(k.lower()))]
@@ -525,7 +533,7 @@ def product_page(it, all_items, n_imgs):
     more = [f'<a href="{kp}">More {esc(k.lower())}</a>' if kp else "", f'<a href="{bp}">More from {esc(it["brand"])}</a>' if bp else "", f'<a href="{g_link("../", g)}">All {esc(g.lower())}</a>' if g else ""]
     more = "".join(m for m in more if m)
     body = f"""<nav class="crumbs">{crumbs}</nav>
-<section class="pd"><div class="gal"><div class="gal-main" id="gal">{gallery}</div>{f'<div class="gal-th">{thumbs}</div>' if thumbs else ''}</div>
+<section class="pd"><div class="gal"><div class="gal-wrap"><div class="gal-main" id="gal">{gallery}</div>{f'<button type="button" class="zoom-btn" data-zoom aria-label="View photos full screen">{ZOOM_ICON}<span class="zh-d">Hover to zoom · click for full screen</span><span class="zh-m">Tap to zoom</span></button>' if imgs else ''}</div>{f'<div class="gal-th">{thumbs}</div>' if thumbs else ''}</div>
 <div class="info"><div class="ptop"><span class="pbrand">{esc(it['brand'])}</span>{f'<span class="porigin">Brand from {esc(it["origin"])}</span>' if it['origin'] else ''}<button type="button" class="pwish" data-wish="{bag_data(it)}" aria-label="Save to wishlist">{SVG['heart']}</button></div>
 <h1 class="pname">{esc(it['name'])}</h1>
 <div class="tags"><a class="tag ok" href="../condition-guide.html">✓ {esc(it['cond'])}</a>{f'<span class="tag">Size {esc(it["size"])}</span>' if it['size'] else ''}{f'<span class="tag">{esc(it["gender"])}</span>' if it['gender'] else ''}<span class="tag">{'Sold out' if sold else 'Only 1 piece'}</span></div>
@@ -599,12 +607,12 @@ function get(q){return fetch(U+'?'+new URLSearchParams(q)).then(function(r){retu
 function post(b){var g=function(){return get({p:JSON.stringify(b)})};return fetch(U,{method:'POST',body:JSON.stringify(b)}).then(function(r){return r.json()}).then(function(r){return r&&r.error==='unknown action'?g():r},g)}
 function down(){$('o-sub').innerHTML='Live offers are not loading right now. You can still send your offer on WhatsApp and we will reply.';$('o-form').querySelector('button').textContent='Send offer on WhatsApp';box.dataset.down=1}
 function show(s){if(!s||s.error)return;st=s;$('o-top').textContent=s.highest?rs(s.highest):'None yet';$('o-count').textContent=s.count;var mn=s.highest?Math.max(s.minOffer,s.highest+s.step):s.minOffer;$('o-min').textContent=rs(mn);box.querySelector('[name=amount]').min=mn;box.querySelector('[name=amount]').placeholder=mn;
- if(s.state!=='open'){$('o-form').hidden=true;$('o-sub').textContent=s.state==='won'?'The deal on this item is final.':s.state==='sold'?'This item has been sold.':'Offers are closed for this item.'}
- clearInterval(tick);if(s.endsAt&&s.state==='open'){var t=$('o-timer');t.hidden=false;var f=function(){var d=s.endsAt-Date.now();if(d<=0){t.textContent='Closing...';return}var h=Math.floor(d/36e5),m=Math.floor(d%%36e5/6e4);t.textContent=h+'h '+m+'m left'};f();tick=setInterval(f,3e4)}}
+ if(s.state!=='open'){$('o-form').hidden=true;$('o-sub').textContent=s.state==='won'?'An offer on this item has won. The winner has '+(s.holdH||24)+' hours to complete the order; if they do not, the item goes back on sale at its normal price.':s.state==='sold'?'This item has been sold.':'Offers are closed for this item.'}
+ clearInterval(tick);var t=$('o-timer');t.hidden=true;if(s.endsAt&&(s.state==='open'||s.state==='won')){t.hidden=false;var f=function(){var d=s.endsAt-Date.now();if(d<=0){t.textContent=s.state==='won'?'Hold ending...':'Closing...';return}var h=Math.floor(d/36e5),m=Math.floor(d%%36e5/6e4);t.textContent=(s.state==='won'?'On hold · ':'')+h+'h '+m+'m left'};f();tick=setInterval(f,3e4)}}
 function msg(t,ok){var m=$('o-msg');m.textContent=t;m.className='o-msg '+(ok?'ok':'err')}
 function wa(t){return 'https://wa.me/%s?text='+encodeURIComponent(t)}
 function mine(phone){get({a:'mine',sku:sku,phone:phone}).catch(function(){return {error:'Could not check right now. Please ask us on WhatsApp.'}}).then(function(r){var el=$('o-mine');el.hidden=false;if(r.error){el.textContent=r.error;return}if(r.none){el.textContent='No offer found for this number.';return}
- var h='<p>Your offer: <b>'+rs(r.amount)+'</b> · '+({'new':'Pending','countered':'You have a counter offer','won':'Deal final!','lost':'This offer did not win'}[r.status]||r.status)+'</p>';
+ var h='<p>Your offer: <b>'+rs(r.amount)+'</b> · '+({'new':'Pending','countered':'You have a counter offer','won':'Deal final! Please complete your order within %s hours.','lost':'This offer did not win','expired':'This offer has expired. The item is back at its normal price.'}[r.status]||r.status)+'</p>';
  if(r.status==='countered')h+='<p>Our counter offer: <b>'+rs(r.counter)+'</b></p><button type="button" id="o-acc">Accept '+rs(r.counter)+'</button>';
  if(r.status==='won')h+='<a class="buy" target="_blank" rel="noopener" href="'+wa('Hi! My deal on '+sku+' at '+rs(r.amount)+' is final. My address is: ')+'">Send address (WhatsApp)</a>';
  el.innerHTML=h;var a=$('o-acc');a&&(a.onclick=function(){a.disabled=true;post({a:'accept',sku:sku,phone:phone}).then(function(x){if(x.error){msg(x.error)}else{msg('Deal final! Send your address on WhatsApp.',1)}mine(phone);refresh()})})})}
@@ -617,13 +625,13 @@ $('o-form').onsubmit=function(e){e.preventDefault();var f=new FormData(e.target)
  if(box.dataset.down)return viaWa(b);btn.disabled=true;msg('Sending...',1);
  post(b).then(function(r){btn.disabled=false;if(r.error){msg(r.error);return}msg(r.message,1);show(r);mine(b.phone)}).catch(function(){btn.disabled=false;down();viaWa(b)})};
 $('o-check').onclick=function(){var p=box.querySelector('[name=phone]').value||prompt('Your WhatsApp number');if(p)mine(p)};
-refresh();if(saved)mine(saved)})()</script>""" % (json.dumps(url), wa_digits())
+refresh();if(saved)mine(saved)})()</script>""" % (json.dumps(url), wa_digits(), HOLD_H)
 
 
 def index_badges_js():
     url = (CFG.get("apiUrl") or CFG.get("offersUrl"))
     if not url: return ""
-    return """<script>fetch(%s+'?a=all').then(function(r){return r.json()}).then(function(m){document.querySelectorAll('.card').forEach(function(c){var s=m[c.dataset.sku];if(!s||!s.highest||c.classList.contains('is-sold'))return;var b=document.createElement('span');b.className='b-offer';b.textContent=s.state==='won'?'Deal done':'Offer Rs '+Math.round(s.highest).toLocaleString('en-PK')+' · '+s.count;c.querySelector('.ci').appendChild(b)})}).catch(function(){})</script>""" % json.dumps(url)
+    return """<script>fetch(%s+'?a=all').then(function(r){return r.json()}).then(function(m){document.querySelectorAll('.card').forEach(function(c){var s=m[c.dataset.sku];if(!s||!s.highest||c.classList.contains('is-sold'))return;var b=document.createElement('span');b.className='b-offer';b.textContent=s.state==='won'?'On hold':'Offer Rs '+Math.round(s.highest).toLocaleString('en-PK')+' · '+s.count;c.querySelector('.ci').appendChild(b)})}).catch(function(){})</script>""" % json.dumps(url)
 
 
 
@@ -1012,6 +1020,7 @@ def main(items_dir, assets_dir):
     (tmp / "photo-report.json").write_text(json.dumps(report, ensure_ascii=False, indent=1))
     (tmp / "items.json").write_text(json.dumps([{"sku": i["sku"], "title": i["title"], "price": i["price"], "status": i["status"]} for i in items]))
     shutil.copy(Path(__file__).parent / "favicon.svg", tmp / "favicon.svg")
+    (tmp / "assets").mkdir(exist_ok=True); (tmp / "assets" / CSS_FILE).write_text(CSS); (tmp / "assets" / JS_FILE).write_text(JS)
     promo = Path(__file__).parent.parent / "promo"  # social media campaign images, served at /promo/ so Metricool can fetch them
     if promo.is_dir(): shutil.copytree(promo, tmp / "promo")
     (tmp / "404.html").write_text(page(f"Not found | {CFG['storeName']}", CFG["tagline"], '<section class="nf"><h1>This page or item is no longer available</h1><p>Take a look at our other items.</p><a class="btn" href="/">Visit the store</a></section>', noindex=True, root="/"))

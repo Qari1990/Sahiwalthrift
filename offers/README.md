@@ -33,10 +33,12 @@ If the web app is down, the website still works: orders and offers open in Whats
 
 ## Offers
 
+- Offers on an item are open for 24 hours from the first offer. Then the highest offer wins (if it reaches your "reserve").
+- The winner has 24 hours to complete the deal. If the item is not marked Sold or Reserved in the tool (and no website order came in for it) by then, the offer expires and the item goes back on sale at its normal price, open for new offers. You get an email when that happens.
 - Counter an offer: type your price in the "counter" column of that row. The buyer sees it on the item page for 24 hours, and the "note" column gets a ready WhatsApp link to tell them.
 - Accept an offer now: set its "status" to "won".
 - Item sold elsewhere: set its row in "Items" to state "sold" (the site also stops offers once the item is Sold in the tool).
-- Change your hidden lowest price for the 48-hour winner: "reserve" column in "Items".
+- Change your hidden lowest price for the winning offer: "reserve" column in "Items".
 
 ## Newsletter
 
