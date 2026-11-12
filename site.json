@@ -15,7 +15,7 @@
   },
   "delivery": {
     "fee": 250,
-    "freeOver": 2000,
+    "freeOver": 1999,
     "days": "3-5 working days all over Pakistan, 1-2 days in Sahiwal"
   },
   "offers": {
@@ -27,12 +27,18 @@
   },
   "announcements": [
     "Cash on delivery all over Pakistan",
-    "Free delivery on orders over Rs 2,000",
+    "Free delivery on orders of Rs 1,999+",
     "New winter drop: jackets, hoodies and sweaters",
     "7-day easy returns on every order"
   ],
   "deal": {
     "extraPct": 10
+  },
+  "campaign": {
+    "name": "11.11 Deals",
+    "pct": 11,
+    "start": "2026-11-11T00:00:00+05:00",
+    "end": "2026-11-13T23:59:59+05:00"
   },
   "bundle": [
     {

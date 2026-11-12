@@ -65,13 +65,31 @@ def deal_price(it):
     return (x + 1) // 50 * 50 - 1  # ends in 49 or 99, never above the promised discount
 
 
+def _ms(iso): return int(datetime.fromisoformat(iso).timestamp() * 1000)
+
+
+def camp_cfg():
+    """Sitewide sale from site.json "campaign" (e.g. 11.11 Deals). Shown and priced in the browser only between start and end."""
+    c = CFG.get("campaign") or {}
+    if not (c.get("pct") and c.get("start") and c.get("end")) or _ms(c["end"]) <= datetime.now(timezone.utc).timestamp() * 1000: return None
+    return {"name": c.get("name", "Sale"), "pct": int(c["pct"]), "start": _ms(c["start"]), "end": _ms(c["end"]),
+            "endTxt": datetime.fromisoformat(c["end"]).strftime("%-d %b, %-I:%M %p")}
+
+
+CAMP = camp_cfg()
+
+
+def camp_price(p):
+    return p * (100 - CAMP["pct"]) // 100 if CAMP else p  # same formula as cp() in site.js
+
+
 def wa_digits():
     d = re.sub(r"\D", "", CFG["whatsapp"])
     return "92" + d[1:] if d.startswith("0") else d
 
 
-def order_link(it=None, price=None):
-    msg = (f"Hi! I'd like to order: {it['brand']} {it['name']} ({it['sku']}), {rs(price or it['price'])}{' (Deal of the Day)' if price else ''}. Is it available?"
+def order_link(it=None, price=None, label="Deal of the Day"):
+    msg = (f"Hi! I'd like to order: {it['brand']} {it['name']} ({it['sku']}), {rs(price or it['price'])}{f' ({label})' if price else ''}. Is it available?"
            if it else "Hi! I have a question about your store.")
     return f"https://wa.me/{wa_digits()}?text={urllib.parse.quote(msg)}"
 
@@ -225,8 +243,7 @@ SVG = {
 
 
 def off(it):
-    if DEAL.get("sku") == it["sku"]: return round((1 - DEAL["price"] / it["price"]) * 100)
-    return round((1 - it["price"] / it["retailPkr"]) * 100) if it["retailPkr"] else 0
+    return round((1 - DEAL["price"] / it["price"]) * 100) if DEAL.get("sku") == it["sku"] else 0
 
 
 DEAL = {}
@@ -352,7 +369,7 @@ def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra=""
     up = root if root is not None else "../" * depth; base = CFG["siteUrl"].rstrip("/")
     dl = CFG.get("delivery") or {}
     tp = {"root": up, "wa": wa_digits(), "store": CFG["storeName"], "deal": DEAL, "bundle": CFG.get("bundle", []), "voucher": CFG.get("voucher"),
-          "fee": dl.get("fee", 0), "freeOver": dl.get("freeOver", 0), "api": CFG.get("apiUrl") or CFG.get("offersUrl") or ""}
+          "fee": dl.get("fee", 0), "freeOver": dl.get("freeOver", 0), "api": CFG.get("apiUrl") or CFG.get("offersUrl") or "", "camp": CAMP}
     v = CFG.get("voucher")
     ann = list(CFG.get("announcements") or ["Cash on delivery all over Pakistan"])
     nav = "".join(f'<div class="nv"><a href="{g_link(up, g)}">{g}</a>' + (f'<div class="nv-dd"><a href="{g_link(up, g)}">All {g.lower()}</a>' + "".join(f'<a href="{esc(shop_link(up, g=g, cat=c))}">{esc(c)}</a>' for c in NAV.get(g, [])) + "</div>" if NAV.get(g) else "") + "</div>" for g in GENDERS)
@@ -375,14 +392,14 @@ def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra=""
 <link rel="icon" href="{up}favicon.svg"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="{FONTS}" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="{FONTS}"></noscript><link rel="stylesheet" href="{up}assets/{CSS_FILE}">{ld_tags}
 <script>window.TP={json.dumps(tp).replace("</", "<\\/")};</script></head><body>
-<div class="topbar"><div class="ann" id="ann">{''.join(f'<span{" class=on" if not i else ""}>{esc(a)}</span>' for i, a in enumerate(ann))}</div>{f'<button type="button" class="tb-v" data-voucher>Free {rs(v["amount"])} voucher</button>' if v else ''}</div>
+{f'<a class="campbar camp" href="{up}deals.html"><b>{esc(CAMP["name"])}</b><span>{CAMP["pct"]}% off everything</span><span class="cb-t">Ends in <time data-camp-left>--</time></span><i>Shop now →</i></a>' if CAMP else ''}<div class="topbar"><div class="ann" id="ann">{''.join(f'<span{" class=on" if not i else ""}>{esc(a)}</span>' for i, a in enumerate(ann))}</div>{f'<button type="button" class="tb-v" data-voucher>Free {rs(v["amount"])} voucher</button>' if v else ''}</div>
 <header class="hd"><button type="button" class="hd-ic hd-menu" data-menu-open aria-label="Open menu">{SVG['menu']}</button>
 <a class="logo" href="{up}index.html"><span class="mark">{esc(CFG["storeName"][:1])}</span><span>{logo_text()}</span></a>
-<nav class="mainnav" aria-label="Main">{nav}<a href="{up}index.html?sort=new#shop">New arrivals</a><a href="{up}index.html#deal" class="dl">Deal of the Day</a><a href="{coll_url(up, 'under-1000') or shop_link(up, max=999)}">Under Rs 1,000</a></nav>
+<nav class="mainnav" aria-label="Main">{nav}<a href="{up}deals.html" class="nav-deals">{esc(CAMP["name"]) if CAMP else "Deals"}</a><a href="{up}index.html?sort=new#shop">New arrivals</a><a href="{up}index.html#deal" class="dl">Deal of the Day</a><a href="{coll_url(up, 'under-1000') or shop_link(up, max=999)}">Under Rs 1,000</a></nav>
 <div class="hd-act"><a class="hd-ic" href="{up}index.html?find=1#shop" aria-label="Search">{SVG['search']}</a><a class="hd-ic" href="{up}wishlist.html" aria-label="Wishlist">{SVG['heart']}<span class="bag-n" data-wish-n hidden>0</span></a>
 <button type="button" class="hd-ic hd-bag" data-bag-open aria-label="Open bag">{SVG['bag']}<span class="bag-n" id="bag-n" hidden>0</span></button></div></header>
 <aside class="menu" id="menu" hidden aria-label="Menu"><div class="menu-in"><div class="bag-hd"><b>Menu</b><button type="button" data-menu-close aria-label="Close">×</button></div>
-<a class="menu-top" href="{up}index.html?sort=new#shop">New arrivals</a><a class="menu-top dl" href="{up}index.html#deal">Deal of the Day</a><a class="menu-top" href="{coll_url(up, 'under-1000') or shop_link(up, max=999)}">Under Rs 1,000</a>
+<a class="menu-top nav-deals" href="{up}deals.html">{esc(CAMP["name"]) if CAMP else "Deals & offers"}</a><a class="menu-top" href="{up}index.html?sort=new#shop">New arrivals</a><a class="menu-top dl" href="{up}index.html#deal">Deal of the Day</a><a class="menu-top" href="{coll_url(up, 'under-1000') or shop_link(up, max=999)}">Under Rs 1,000</a>
 {drawer}{f'<details><summary>Popular</summary>{pop}</details>' if pop else ''}<details><summary>Shop by condition</summary>{''.join(f'<a href="{esc(shop_link(up, cond=c))}">{esc(c)}</a>' for c in CONDS)}</details>
 <details><summary>Help</summary>{help_links}</details>
 <a class="buy" href="{esc(order_link())}" target="_blank" rel="noopener">{ICON}Chat on WhatsApp</a></div></aside>
@@ -422,9 +439,12 @@ def bag_data(it):
 
 
 def price_html(it, cls="cp"):
-    reg = f'<span class="{cls}{" dl-reg" if DEAL.get("sku") == it["sku"] else ""}"><b>{rs(it["price"])}</b>{f"<s>{rs(it['retailPkr'])}</s>" if it["retailPkr"] else ""}</span>'
-    if DEAL.get("sku") != it["sku"]: return reg
-    return reg + f'<span class="{cls} dl"><b>{rs(DEAL["price"])}</b><s>{rs(it["price"])}</s></span>'
+    # The regular price is the only "was" price we ever strike through (the AI retail estimate is not an original price).
+    d = DEAL.get("sku") == it["sku"]
+    out = f'<span class="{cls}{" dl-reg" if d else ""}{" camp-reg" if CAMP else ""}"><b>{rs(it["price"])}</b></span>'
+    if CAMP: out += f'<span class="{cls} camp{" dl-reg" if d else ""}"><b>{rs(camp_price(it["price"]))}</b><s>{rs(it["price"])}</s><em>-{CAMP["pct"]}%</em></span>'
+    if d: out += f'<span class="{cls} dl"><b>{rs(DEAL["price"])}</b><s>{rs(it["price"])}</s></span>'
+    return out
 
 
 AI_KINDS = ("studio", "street")
@@ -439,8 +459,9 @@ def card(it, up=""):
     img = f'{up}img/t/{it["sku"]}-1.jpg' if it["images"] else ""
     img2 = f'{up}img/t/{it["sku"]}-2.jpg' if it.get("n_imgs", 0) > 1 else ""
     sold = it["status"] == "Sold"
-    badge = '<span class="b-sold">Sold out</span>' if sold else (f'<span class="b-off">-{off(it)}%</span>' if off(it) else '<span class="b-new">Just in</span>' if it.get("fresh") else '')
-    return f"""<article class="card{' is-sold' if sold else ''}" data-sku="{esc(it['sku'])}" data-cat="{esc(it['category'])}" data-g="{esc(it['gender'])}" data-size="{esc(it['size'])}" data-brand="{esc(it['brand'])}" data-cond="{esc(it['cond'])}" data-price="{it['price']}" data-off="{off(it)}" data-new="{esc(it['created'])}" data-q="{esc((it['title'] + ' ' + it['brand'] + ' ' + it['category'] + ' ' + it['color'] + ' ' + it['sku']).lower())}">
+    badge = '<span class="b-sold">Sold out</span>' if sold else ('<span class="b-new">Just in</span>' if it.get("fresh") else '')
+    if CAMP and not sold: badge += f'<span class="b-camp camp">{esc(CAMP["name"].split()[0])} · -{CAMP["pct"]}%</span>'
+    return f"""<article class="card{' is-sold' if sold else ''}" data-sku="{esc(it['sku'])}" data-cat="{esc(it['category'])}" data-g="{esc(it['gender'])}" data-size="{esc(it['size'])}" data-brand="{esc(it['brand'])}" data-cond="{esc(it['cond'])}" data-price="{it['price']}" data-new="{esc(it['created'])}" data-q="{esc((it['title'] + ' ' + it['brand'] + ' ' + it['category'] + ' ' + it['color'] + ' ' + it['sku']).lower())}">
 <a class="cl" href="{up}p/{esc(it['sku'])}.html"><div class="ci">{f'<img src="{img}" alt="{esc(alt_text(it))}" loading="lazy" decoding="async" width="600" height="600">' if img else ''}{f'<img class="alt" src="{img2}" alt="" loading="lazy" decoding="async" width="600" height="600">' if img2 else ''}{badge}{AI_BADGE if 1 in it.get("ai_idx", ()) else ''}{'<span class="b-deal dl">Deal of the Day</span>' if DEAL.get('sku') == it['sku'] and not sold else ''}{f'<span class="b-size">{esc(it["size"])}</span>' if it['size'] else ''}</div>
 <div class="cb"><span class="cbrand">{esc(it['brand'])} <small>({esc(it['sku'])})</small></span><span class="ct">{esc(it['name'])}</span>
 <span class="cmeta"><span class="cond">{esc(it['cond'])}</span>{'' if sold else '<span>Only 1</span>'}</span>{price_html(it)}</div></a>
@@ -471,7 +492,7 @@ def offer_box(it):
 def delivery_line():
     d = CFG.get("delivery") or {}
     fee = f"Delivery {rs(d['fee'])}" if d.get("fee") else "Free delivery"
-    free = f", free over {rs(d['freeOver'])}" if d.get("fee") and d.get("freeOver") else ""
+    free = f", free on orders of {rs(d['freeOver'])}+" if d.get("fee") and d.get("freeOver") else ""
     return f"{fee}{free}. {d.get('days', '')}".strip()
 
 
@@ -522,7 +543,7 @@ def product_page(it, all_items, n_imgs):
     seen = set(); details = [(k, v) for k, v in details if v and not (k.lower() in seen or seen.add(k.lower()))]
     save = it["retailPkr"] - it["price"] if it["retailPkr"] else 0
     wa = order_link(it)
-    deal_href = f' data-deal-href="{esc(order_link(it, DEAL["price"]))}"' if deal else ""
+    deal_href = (f' data-deal-href="{esc(order_link(it, DEAL["price"]))}"' if deal else "") + (f' data-camp-href="{esc(order_link(it, camp_price(it["price"]), CAMP["name"]))}"' if CAMP else "")
     ask = f'<a class="ask" href="{esc(wa)}"{deal_href} target="_blank" rel="noopener">{ICON}Ask or order on WhatsApp</a>'
     buy = f'<button type="button" class="buy" data-buy="{bag_data(it)}">Buy now · Cash on delivery</button>'
     hl = "".join(f"<li>{esc(h)}</li>" for h in it["hl"])
@@ -538,7 +559,8 @@ def product_page(it, all_items, n_imgs):
 <h1 class="pname">{esc(it['name'])}</h1>
 <div class="tags"><a class="tag ok" href="../condition-guide.html">✓ {esc(it['cond'])}</a>{f'<span class="tag">Size {esc(it["size"])}</span>' if it['size'] else ''}{f'<span class="tag">{esc(it["gender"])}</span>' if it['gender'] else ''}<span class="tag">{'Sold out' if sold else 'Only 1 piece'}</span></div>
 {f'<div class="dealbar dl"><b>Deal of the Day</b><span>Extra {CFG["deal"]["extraPct"]}% off for today only · ends in <time data-countdown></time></span></div>' if deal else ''}
-<div class="pp-wrap">{price_html(it, "pp")}{f'<span class="b-off">-{off(it)}%</span>' if off(it) else ''}</div>
+{f'<a class="dealbar campdeal camp{" dl-reg" if deal else ""}" href="../deals.html"><b>{esc(CAMP["name"])}: {CAMP["pct"]}% off this piece</b><span>Sale ends in <time data-camp-left></time> · plus bundle savings</span></a>' if CAMP and not sold else ''}
+<div class="pp-wrap">{price_html(it, "pp")}</div>
 {f'<p class="save">Retail abroad ~${it["retailUsd"]}. You save {rs(save)}.</p>' if save > 0 else ''}
 {'<p class="soldmsg">This item has been sold. See similar items below or ask us on WhatsApp.</p>' if sold else f'<div class="cta">{buy}<button type="button" class="addbag" data-add="{bag_data(it)}">Add to bag</button></div>{ask}' + offer_box(it)}
 <ul class="perks"><li><b>Cash on delivery</b><span>Pay when the parcel arrives</span></li><li><b>Delivery</b><span>{esc(delivery_line())}</span></li><li><b>Easy exchange</b><span><a href="../returns.html">{CFG.get('returns', {}).get('days', 3)}-day exchange</a> if it doesn't match</span></li><li><b>Bundle &amp; save</b><span>{esc(bundle_line())}</span></li></ul>
@@ -661,6 +683,73 @@ Array.prototype.forEach.call(b,function(x,k){x.onclick=function(){go(k);rs()}});
 function rs(){clearInterval(tm);tm=setInterval(function(){go(i+1)},5000)}mark();if(n>1)rs()})()</script>"""
 
 
+# ---------- deals, campaign hero, homepage blocks ----------
+def offer_cards(up=""):
+    """Every offer that is running, as (css class, kicker, big text, line, link, button). Shared by the homepage strip and deals.html."""
+    dl = CFG.get("delivery") or {}; v = CFG.get("voucher"); out = []
+    if CAMP: out.append(("o-camp camp", CAMP["name"], f"{CAMP['pct']}% off", f"Every piece in the store, until {CAMP['endTxt']}.", f"{up}index.html#shop", "Shop the sale"))
+    if DEAL: out.append(("o-deal dl", "Deal of the Day", f"Extra {CFG['deal']['extraPct']}% off", "One hand-picked piece, a new one every day.", f"{up}index.html#deal", "See today's deal"))
+    if dl.get("freeOver"): out.append(("o-free", "Free delivery", f"{rs(dl['freeOver'])}+", f"Every {rs(dl['freeOver'])} jacket ships free. Below that, delivery is {rs(dl.get('fee', 0))}.", f"{up}index.html?max={dl['freeOver']}#shop", "Shop now"))
+    for b in CFG.get("bundle", []):
+        out.append(("o-bundle", f"Buy {b['min']}{'' if b.get('off') else '+'}", rs(b["off"]) + " off" if b.get("off") else f"{b['pct']}% off", f"Add {b['min']}{' or more' if not b.get('off') else ''} items to your bag. Applied automatically at checkout.", f"{up}index.html#shop", "Build a bundle"))
+    if v: out.append(("o-voucher", "Welcome gift", rs(v["amount"]) + " off", f"Code {v['code']} on your first order over {rs(v['minOrder'])}.", "", "Claim voucher"))
+    if any(i for i in COLL if i[0] == "under-1000"): out.append(("o-steal", "Steals", "Under Rs 1,000", "Branded pieces at pocket-money prices.", coll_url(up, "under-1000"), "Shop steals"))
+    return out
+
+
+def offer_strip(up="", big=False):
+    cards = "".join(f'<{"a" if href else "div"} class="ocard {cls}"{f" href=\"{esc(href)}\"" if href else ""}><span class="ok">{esc(k)}</span><b>{esc(t)}</b><span>{esc(line)}</span>'
+                    + (f'<i>{esc(btn)} →</i>' if href else f'<button type="button" data-voucher>{esc(btn)}</button>') + f'</{"a" if href else "div"}>' for cls, k, t, line, href, btn in offer_cards(up))
+    return f'<div class="ostrip{" big" if big else ""}">{cards}</div>'
+
+
+def camp_hero(live, up=""):
+    if not CAMP: return ""
+    picks = sorted((i for i in live if i["images"]), key=lambda i: (-i["price"], i["sku"]))[:3]
+    dl = (CFG.get("delivery") or {}).get("freeOver")
+    stack = "".join(f'<a class="ch-p ch-p{n}" href="{up}p/{esc(i["sku"])}.html"><img src="{up}img/t/{i["sku"]}-1.jpg" alt="{esc(alt_text(i))}" width="600" height="600"{" fetchpriority=high" if not n else " loading=lazy decoding=async"}><span><b>{rs(camp_price(i["price"]))}</b><s>{rs(i["price"])}</s></span></a>' for n, i in enumerate(picks))
+    perks = [f"Buy {b['min']}: {rs(b['off'])} off" if b.get("off") else f"Buy {b['min']}+: extra {b['pct']}% off" for b in CFG.get("bundle", [])] + ([f"Free delivery {rs(dl)}+"] if dl else [])
+    name = CAMP["name"].split(" ", 1)
+    return f"""<section class="camphero camp" aria-label="{esc(CAMP['name'])}"><div class="ch-tx"><p class="ch-kick">Limited time · {esc(CFG['storeName'])}</p>
+<h2 class="ch-h"><span>{esc(name[0])}</span>{f'<em>{esc(name[1])}</em>' if len(name) > 1 else ''}</h2>
+<p class="ch-big">{CAMP['pct']}<small>%<br>OFF</small></p><ul class="ch-perks">{''.join(f'<li>{esc(p)}</li>' for p in perks)}</ul>
+<div class="ch-clock" data-camp-clock aria-label="Time left"><span><b data-u="d">0</b>days</span><span><b data-u="h">00</b>hrs</span><span><b data-u="m">00</b>min</span><span><b data-u="s">00</b>sec</span></div>
+<div class="cta"><a class="btn hot" href="{up}index.html#shop">Shop the sale</a><a class="btn ghost" href="{up}deals.html">All offers</a></div></div>
+<div class="ch-stack">{stack}</div></section>"""
+
+
+def budget_tiles(live):
+    tiers = [(999, "Under Rs 1,000", "Pocket-friendly steals"), (1499, "Under Rs 1,500", "Everyday favourites"), (1999, "Up to Rs 1,999", "Ships free")]
+    out = "".join(f'<a class="btile t{n}" href="{esc(shop_link(max=mx, sort="high"))}"><span>{esc(sub)}</span><b>{esc(lbl)}</b><em>{c} pieces</em></a>'
+                  for n, (mx, lbl, sub) in enumerate(tiers) if (c := sum(i["price"] <= mx for i in live)))
+    return f'<section class="budget"><div class="sec-hd"><p class="eyebrow">Shop by budget</p><h2>What\'s your budget?</h2></div><div class="btiles">{out}</div></section>' if out else ""
+
+
+def brand_marquee(up=""):
+    if not BRANDS: return ""
+    row = "".join(f'<a href="{up}brands/{b}.html">{esc(n)}</a>' for b, n in sorted(BRANDS.items(), key=lambda x: x[1].lower()))
+    return f'<section class="marq" aria-label="Brands we stock"><div class="marq-in">{row}<span aria-hidden="true" class="marq-dup">{row}</span></div></section>'
+
+
+def deals_page(items):
+    live = [i for i in items if i["status"] != "Sold"]
+    h1 = CAMP["name"] if CAMP else "Deals & offers"
+    dl = CFG.get("delivery") or {}
+    rules = [f"{CAMP['pct']}% off is taken off every item's price automatically, until {CAMP['endTxt']} (Pakistan time). After that, prices go back to normal." if CAMP else "",
+             "Bundle savings are added on top: " + bundle_line() + "." if CFG.get("bundle") else "",
+             f"Free delivery on orders of {rs(dl['freeOver'])}+. During a sale, items count at their regular price, so a {rs(dl['freeOver'])} jacket still ships free." if dl.get("freeOver") else "",
+             f"The {rs(CFG['voucher']['amount'])} welcome voucher ({CFG['voucher']['code']}) works on your first order over {rs(CFG['voucher']['minOrder'])}." if CFG.get("voucher") else "",
+             "Every piece is one-off. Deals cannot hold an item, so add it to your bag and check out before someone else does.",
+             "Cash on delivery all over Pakistan. You see the final total before you place the order."]
+    steals = sorted(live, key=lambda i: (i["price"], i["sku"]))
+    body = f"""{camp_hero(live)}<section class="dealsp"><nav class="crumbs"><a href="index.html">Home</a> / <span>{esc(h1)}</span></nav>
+<h1>{esc(h1)}</h1><p class="lead">All of our current offers in one place. Discounts are applied automatically in your bag, no code needed (except the welcome voucher).</p>
+{offer_strip("", big=True)}<div class="drules"><h2>How the offers work</h2><ol>{''.join(f'<li>{esc(r)}</li>' for r in rules if r)}</ol></div></section>
+<section class="shop coll"><h2>{'Everything on sale' if CAMP else 'Shop all pieces'} <span class="muted">{len(live)} pieces, lowest price first</span></h2><div class="grid">{''.join(card(i) for i in steals)}</div></section>"""
+    return page(f"{h1} | {CFG['storeName']}", f"Current deals at {CFG['storeName']}: " + "; ".join(f"{k} {t}" for _, k, t, *_ in offer_cards()) + ". Pre-loved branded clothes, cash on delivery in Pakistan.",
+                body, 0, None, "deals.html", None, index_badges_js())
+
+
 def index_page(items):
     live = [i for i in items if i["status"] != "Sold"]
     cats = sorted({i["category"] for i in items}); sizes = [s for s in dict.fromkeys(i["size"] for i in live) if s]
@@ -680,12 +769,14 @@ def index_page(items):
     pills = "".join(f'<a href="{esc(shop_link(cat=c))}">{esc(c)} <em>{sum(i["category"] == c for i in live)}</em></a>' for c in sorted({i["category"] for i in live}))
     conds = "".join(f'<a href="{esc(shop_link(cond=c))}"><b>{esc(c)}</b><span>{esc(COND_NOTE[c])}</span></a>' for c in CONDS if any(i["cond"] == c for i in live))
     slides = hero_slides(live, v)
-    body = f"""<section class="slider" id="slider" aria-label="Highlights"><div class="sl-track" id="sl-track">{slides}</div><div class="sl-dots" id="sl-dots"></div></section>
+    body = f"""{camp_hero(live)}<section class="slider{' camp-reg' if CAMP else ''}" id="slider" aria-label="Highlights"><div class="sl-track" id="sl-track">{slides}</div><div class="sl-dots" id="sl-dots"></div></section>
+<section class="deals-home"><div class="sec-hd"><p class="eyebrow">Deals for you</p><h2>Ways to save today</h2><a class="o-link" href="deals.html">All offers →</a></div>{offer_strip()}</section>
 <section class="gtiles" style="--n:{tiles.count('class="gtile"')}" aria-label="Shop by">{tiles}</section>
+{budget_tiles(live)}
 {f'<nav class="pills" aria-label="Categories">{pills}</nav>' if pills else ''}
 {deal}
-<section class="trust"><div><b>Cash on delivery</b><span>Pay when the parcel arrives</span></div><div><b>{'Free delivery over ' + rs(dl['freeOver']) if dl.get('freeOver') else 'Nationwide delivery'}</b><span>{esc(dl.get('days', 'All over Pakistan'))}</span></div><div><b>Hand-checked</b><span>Washed, pressed, photographed for real</span></div><div><b>{CFG.get('returns', {}).get('days', 3)}-day exchange</b><span>If it doesn't match the page</span></div></section>
-<section class="offers3"><div><b>Bundle &amp; save</b><span>{esc(bundle_line())}</span></div>{f'<div><b>Welcome voucher</b><span>{rs(v["amount"])} off your first order over {rs(v["minOrder"])}</span></div>' if v else ''}<div><b>Only 1 of each</b><span>Every piece is one-off, so don't wait if you like it.</span></div></section>
+{brand_marquee()}
+<section class="trust"><div><b>Cash on delivery</b><span>Pay when the parcel arrives</span></div><div><b>{'Free delivery from ' + rs(dl['freeOver']) if dl.get('freeOver') else 'Nationwide delivery'}</b><span>{esc(dl.get('days', 'All over Pakistan'))}</span></div><div><b>Hand-checked</b><span>Washed, pressed, photographed for real</span></div><div><b>{CFG.get('returns', {}).get('days', 3)}-day exchange</b><span>If it doesn't match the page</span></div></section>
 <section class="rv" id="rv" hidden><h2>Recently viewed</h2><div class="rv-row"></div></section>
 <section id="shop" class="shop"><div class="shop-hd"><h2 id="shop-h">Latest Arrivals <span class="muted" id="count">{len(live)} items</span></h2>
 <input id="q" type="search" placeholder="Search brand, item, colour, code" aria-label="Search"></div>
@@ -695,7 +786,7 @@ def index_page(items):
 <select id="size" aria-label="Size"><option value="">All sizes</option>{''.join(f'<option>{esc(s)}</option>' for s in sizes)}</select>
 <select id="cond" aria-label="Condition"><option value="">Any condition</option>{''.join(f'<option>{esc(c)}</option>' for c in CONDS)}</select>
 <select id="max" aria-label="Price"><option value="">Any price</option><option value="999">Under Rs 1,000</option><option value="1499">Under Rs 1,500</option><option value="1999">Under Rs 2,000</option><option value="2999">Under Rs 3,000</option></select>
-<select id="sort" aria-label="Sort"><option value="new">Newest</option><option value="low">Price: low to high</option><option value="high">Price: high to low</option><option value="off">Biggest saving</option></select>
+<select id="sort" aria-label="Sort"><option value="new">Newest</option><option value="low">Price: low to high</option><option value="high">Price: high to low</option></select>
 <label class="chk"><input type="checkbox" id="sold"> Show sold</label><button type="button" class="o-link" id="clear" hidden>Clear filters</button></div>
 <div class="grid" id="grid">{''.join(card(i) for i in items)}</div><p class="empty" id="empty" hidden>Nothing here yet. Try another filter, or ask on WhatsApp and we'll look for it.</p></section>
 {f'<section class="conds"><h2>Shop by condition</h2><div>{conds}</div><a class="o-link" href="condition-guide.html">How we grade condition</a></section>' if conds else ''}
@@ -707,7 +798,7 @@ def index_page(items):
     js = """<script>(function(){var g='All',$=function(i){return document.getElementById(i)},q=$('q'),cat=$('cat'),size=$('size'),cond=$('cond'),sort=$('sort'),sold=$('sold'),mx=$('max'),grid=$('grid'),cards=[].slice.call(grid.children),brand='';
 function setG(v){g=v;document.querySelectorAll('#g button').forEach(function(x){x.setAttribute('aria-pressed',x.dataset.v===v)})}
 function run(){var v=q.value.trim().toLowerCase(),n=0;cards.forEach(function(c){var ok=(!mx.value||+c.dataset.price<=+mx.value)&&(g==='All'||c.dataset.g===g||(g!=='Kids'&&c.dataset.g==='Unisex'))&&(!cat.value||c.dataset.cat===cat.value)&&(!size.value||c.dataset.size===size.value)&&(!cond.value||c.dataset.cond===cond.value)&&(!brand||c.dataset.brand===brand)&&(!v||c.dataset.q.indexOf(v)>-1)&&(sold.checked||!c.classList.contains('is-sold'));c.hidden=!ok;if(ok)n++});
- var s=sort.value;cards.slice().sort(function(a,b){return s==='low'?a.dataset.price-b.dataset.price:s==='high'?b.dataset.price-a.dataset.price:s==='off'?b.dataset.off-a.dataset.off:(a.dataset['new']<b.dataset['new']?1:-1)}).forEach(function(c){grid.appendChild(c)});
+ var s=sort.value;cards.slice().sort(function(a,b){return s==='low'?a.dataset.price-b.dataset.price:s==='high'?b.dataset.price-a.dataset.price:(a.dataset['new']<b.dataset['new']?1:-1)}).forEach(function(c){grid.appendChild(c)});
  var f=g!=='All'||cat.value||size.value||cond.value||mx.value||brand||v;$('clear').hidden=!f;
  $('shop-h').firstChild.textContent=(f?[g!=='All'?g:'',cat.value,cond.value,brand].filter(Boolean).join(' · ')||'Results':'Latest Arrivals')+' ';
  $('count').textContent=n+' items';$('empty').hidden=n>0}
@@ -862,7 +953,7 @@ def info_pages():
 <li><b>Cash on delivery</b><span>Pay the rider when the parcel arrives.</span></li></ol>
 <p>No WhatsApp? Call us: <a href="tel:{esc(CFG['whatsapp'].replace(' ', ''))}">{ph}</a>.</p>""")
     P["shipping"] = ("Delivery & cash on delivery", "Delivery all over Pakistan, pay when the parcel arrives.", f"""
-<h2>Delivery charges</h2><p>{'Delivery ' + fee + ' per order. ' if d.get('fee') else ''}{('Orders over ' + free + ' get free delivery.') if d.get('freeOver') else ''}</p>
+<h2>Delivery charges</h2><p>{'Delivery ' + fee + ' per order. ' if d.get('fee') else ''}{('Orders of ' + free + ' or more get free delivery.') if d.get('freeOver') else ''}</p>
 <h2>Delivery time</h2><p>{esc(d.get('days', ''))}. Dispatched within 24 hours of confirmation. We send the tracking number on WhatsApp after dispatch.</p>
 <h2>Cash on delivery (COD)</h2><p>No advance payment. Pay the rider in cash when the parcel arrives. For large orders we may call to confirm.</p>
 <h2>Order confirm</h2><p>Every order is confirmed by WhatsApp or call. If we can't confirm it, the order is cancelled and the item goes back on sale.</p>""")
@@ -999,7 +1090,7 @@ def main(items_dir, assets_dir):
     if pick and CFG.get("deal"):
         d = pick[day.toordinal() % len(pick)]; DEAL.update(sku=d["sku"], price=deal_price(d), day=day.strftime("%Y-%m-%d"))
     for it in items: (tmp / "p" / f"{it['sku']}.html").write_text(product_page(it, items, counts[it["sku"]]))
-    (tmp / "index.html").write_text(index_page(items))
+    (tmp / "index.html").write_text(index_page(items)); (tmp / "deals.html").write_text(deals_page(items))
     built = [c for c in COLLECTIONS if any(x[0] == c[0] for x in COLL)]
     for slug, h1, title, desc, intro, fn in built:
         its = [i for i in items if fn(i)]
@@ -1028,7 +1119,7 @@ def main(items_dir, assets_dir):
     newest = lambda its: max((str(i["updated"])[:10] for i in its), default="")
     coll_rows = [(f"{slug}.html", newest([i for i in items if fn(i)]), []) for slug, _, _, _, _, fn in built]
     brand_rows = [(f"brands/{b}.html", newest([i for i in items if slugify(i["brand"]) == b]), []) for b in BRANDS] + ([("brands.html", newest(items), [])] if BRANDS else [])
-    (tmp / "sitemap.xml").write_text(sitemap(base, [("", day.strftime("%Y-%m-%d"), [])] + coll_rows + brand_rows + [(f"{s}.html", "", []) for s, _ in INFO if s not in NOINDEX] +
+    (tmp / "sitemap.xml").write_text(sitemap(base, [("", day.strftime("%Y-%m-%d"), []), ("deals.html", day.strftime("%Y-%m-%d"), [])] + coll_rows + brand_rows + [(f"{s}.html", "", []) for s, _ in INFO if s not in NOINDEX] +
         [(f"p/{i['sku']}.html", str(i["updated"])[:10], [f"{base}/img/{i['sku']}-{n}.jpg" for n in range(1, counts[i["sku"]] + 1)]) for i in items]))
     for f in ("logo.png", "og-image.png"):
         if (Path(__file__).parent / f).exists(): shutil.copy(Path(__file__).parent / f, tmp / f)
