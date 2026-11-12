@@ -30,7 +30,7 @@ P['111-ad-feed-real-brands']=[1080,1350,`<div class="a glow" style="inset:0"></d
 <div class="a an" style="left:60px;top:140px;font-size:104px">ORIGINAL BRANDS.<br><span style="color:${G}">REAL TAGS.</span></div>
 <div class="a pf" style="left:62px;top:356px;font-size:56px;color:#f4ead2">at thrift prices</div>
 ${HERO.map(([s,b,p],i)=>card(s,b,p,60+(i%3)*325,440+Math.floor(i/3)*305,310,290)).join('')}
-<div class="a" style="left:60px;top:1050px;font-size:22px;font-weight:800;letter-spacing:.12em;color:${G}">✓ THE REAL BRAND TAG OF EVERY PIECE IS SHOWN</div>
+<div class="a" style="left:60px;top:1050px;font-size:22px;font-weight:800;letter-spacing:.12em;color:${G}">✓ REAL TAGS OF OUR ACTUAL PIECES · ASK FOR ANY TAG PHOTO</div>
 ${TAGS.map(([n,b],i)=>`<div class="tag a" style="left:${60+i*245}px;top:1088px;width:230px;height:112px"><img src="${T(n)}"></div>`).join('')}
 <div class="a" style="left:60px;top:1172px;font-size:22px;font-weight:800;letter-spacing:.12em;color:${G}">REAL TAG OF THE ACTUAL PIECE ↓</div>
 <div class="a" style="left:0;top:1220px;width:1080px;height:130px;background:${G};color:${BG};display:flex;align-items:center;justify-content:space-around;font-weight:900;font-size:27px"><span>✓ Cash on Delivery</span><span>✓ 7-day return guarantee</span><span>✓ All Pakistan</span></div>
@@ -43,7 +43,7 @@ P['112-ad-story-real-brands']=[1080,1920,`<div class="a glow" style="inset:0"></
 <div class="a an" style="left:0;width:1080px;text-align:center;top:260px;font-size:118px">ORIGINAL BRANDS.<br><span style="color:${G}">REAL TAGS.</span></div>
 <div class="a pf" style="left:0;width:1080px;text-align:center;top:500px;font-size:64px;color:#f4ead2">at thrift prices</div>
 ${HERO.map(([s,b,p],i)=>card(s,b,p,60+(i%3)*325,620+Math.floor(i/3)*370,310,355)).join('')}
-<div class="a" style="left:60px;top:1385px;font-size:26px;font-weight:800;letter-spacing:.12em;color:${G}">✓ WE SHOW THE REAL BRAND TAG OF EVERY PIECE</div>
+<div class="a" style="left:60px;top:1385px;font-size:26px;font-weight:800;letter-spacing:.12em;color:${G}">✓ REAL TAGS OF OUR PIECES · ASK FOR ANY TAG PHOTO</div>
 ${tagRow(60,1430,225,13)}
 <div class="a" style="left:0;top:1700px;width:1080px;text-align:center;font-size:32px;font-weight:800;color:#f4ead2">Cash on Delivery · 7-day return guarantee · All Pakistan</div>
 ${foot(1810,1080)}`];
@@ -51,7 +51,7 @@ ${foot(1810,1080)}`];
 P['113-ad-feed-tag-proof']=[1080,1350,`<div class="a glow" style="inset:0"></div>
 <img class="a" src="${LOGOW}" style="left:60px;top:50px;width:230px">
 <div class="a an" style="left:60px;top:140px;font-size:96px">DON'T TRUST US.<br><span style="color:${G}">CHECK THE TAG.</span></div>
-<div class="a" style="left:62px;top:345px;font-size:32px;font-weight:600;color:#d6e0dc;width:960px;line-height:1.4">Every ABCThrift piece is shown with its own real brand tag, front and back photos. No copies, no stock photos.</div>
+<div class="a" style="left:62px;top:345px;font-size:32px;font-weight:600;color:#d6e0dc;width:960px;line-height:1.4">These are the real tags of our actual pieces. Want to see the tag of any item? WhatsApp us and we send the photo.</div>
 ${TAGS.map(([n,b],i)=>`<div class="tag a" style="left:${60+(i%2)*490}px;top:${480+Math.floor(i/2)*340}px;width:470px;height:320px"><img src="${T(n)}"><div class="a" style="left:14px;bottom:14px;background:rgba(18,32,27,.92);border-radius:12px;padding:8px 14px;font-weight:900;font-size:24px;letter-spacing:.06em">✓ ${b.toUpperCase()}</div></div>`).join('')}
 <div class="a" style="left:0;top:1170px;width:1080px;display:flex;justify-content:space-around;font-weight:900;font-size:27px;color:#f4ead2"><span>Jackets from Rs 999</span><span>Hoodies from Rs 599</span><span>Kids from Rs 399</span></div>
 ${foot(1240,1080)}`];
@@ -67,7 +67,7 @@ for(const [k,h,pr,br,items] of CATS){P[k]=[1080,1080,`<div class="a glow" style=
 <div class="a an" style="left:50px;top:${h.length>18?52:44}px;font-size:${h.length>18?58:76}px;width:760px">${h}</div>
 <div class="a" style="right:50px;top:50px;background:${G};color:${BG};font-weight:900;font-size:32px;padding:12px 22px;border-radius:999px">${pr}</div>
 ${items.map(([s,b,p],i)=>card(s,b,p,50+(i%2)*500,(h.length>18?230:150)+Math.floor(i/2)*(h.length>18?380:420),480,h.length>18?365:405)).join('')}
-<div class="a" style="left:50px;top:1000px;font-size:25px;font-weight:800;color:#f4ead2;width:980px;display:flex;justify-content:space-between"><span>✓ Real tag shown · ${br}</span></div>`];}
+<div class="a" style="left:50px;top:1000px;font-size:25px;font-weight:800;color:#f4ead2;width:980px;display:flex;justify-content:space-between"><span>✓ Brands: ${br} · ask for any tag photo</span></div>`];}
 P['114-car-0-intro']=[1080,1080,`<div class="a glow" style="inset:0"></div><img class="a" src="${LOGOW}" style="left:50px;top:50px;width:250px">
 <div class="a an" style="left:50px;top:150px;font-size:100px">ORIGINAL BRANDS.<br><span style="color:${G}">THRIFT PRICES.</span></div>
 ${tagRow(50,430,232,17)}
