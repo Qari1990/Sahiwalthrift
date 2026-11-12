@@ -364,6 +364,18 @@ def clip(text, n):
     return t if len(t) <= n else t[:n - 1].rsplit(" ", 1)[0].rstrip(",;:-") + "…"
 
 
+def meta_pixel():
+    # Meta (Facebook / Instagram) Pixel base code, on every page when site.json has "metaPixel" (the 15-16 digit dataset ID from Events Manager).
+    # The events (ViewContent, AddToCart, InitiateCheckout, Purchase, Search, Lead, Contact) are sent by site.js.
+    pid = re.sub(r"\D", "", str(CFG.get("metaPixel") or ""))
+    if not pid: return ""
+    return ("<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};"
+            "if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];"
+            "s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');"
+            f"fbq('init','{pid}');fbq('track','PageView');</script>"
+            f'<noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id={pid}&amp;ev=PageView&amp;noscript=1"></noscript>')
+
+
 def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra="", ld=None, noindex=False, root=None, og_type="website", meta=None, img_alt=""):
     # root="/" for pages GitHub Pages can serve at any path (404.html), so links work from /p/<missing>.html too
     up = root if root is not None else "../" * depth; base = CFG["siteUrl"].rstrip("/")
@@ -391,7 +403,7 @@ def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra=""
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="{esc(title)}"><meta name="twitter:description" content="{esc(clip(desc, 200))}"><meta name="twitter:image" content="{esc(og_img)}"><meta name="theme-color" content="#15201d">{f'<meta name="google-site-verification" content="{esc(CFG["googleVerification"])}">' if CFG.get("googleVerification") else ''}
 <link rel="icon" href="{up}favicon.svg"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="{FONTS}" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="{FONTS}"></noscript><link rel="stylesheet" href="{up}assets/{CSS_FILE}">{ld_tags}
-<script>window.TP={json.dumps(tp).replace("</", "<\\/")};</script></head><body>
+<script>window.TP={json.dumps(tp).replace("</", "<\\/")};</script>{meta_pixel()}</head><body>
 {f'<a class="campbar camp" href="{up}deals.html"><b>{esc(CAMP["name"])}</b><span>{CAMP["pct"]}% off everything</span><span class="cb-t">Ends in <time data-camp-left>--</time></span><i>Shop now →</i></a>' if CAMP else ''}<div class="topbar"><div class="ann" id="ann">{''.join(f'<span{" class=on" if not i else ""}>{esc(a)}</span>' for i, a in enumerate(ann))}</div>{f'<button type="button" class="tb-v" data-voucher>Free {rs(v["amount"])} voucher</button>' if v else ''}</div>
 <header class="hd"><button type="button" class="hd-ic hd-menu" data-menu-open aria-label="Open menu">{SVG['menu']}</button>
 <a class="logo" href="{up}index.html"><span class="mark">{esc(CFG["storeName"][:1])}</span><span>{logo_text()}</span></a>
