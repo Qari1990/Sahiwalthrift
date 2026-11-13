@@ -641,7 +641,7 @@ def page(title, desc, body, depth=0, image=None, canonical="", wa=None, extra=""
     # root="/" for pages GitHub Pages can serve at any path (404.html), so links work from /p/<missing>.html too
     up = root if root is not None else "../" * depth; base = CFG["siteUrl"].rstrip("/")
     dl = CFG.get("delivery") or {}
-    tp = {"root": up, "wa": wa_digits(), "store": CFG["storeName"], "deal": DEAL, "bundle": CFG.get("bundle", []), "voucher": CFG.get("voucher"),
+    tp = {"root": up, "wa": wa_digits(), "fb": (CFG.get("social") or {}).get("facebook") or "", "store": CFG["storeName"], "deal": DEAL, "bundle": CFG.get("bundle", []), "voucher": CFG.get("voucher"),
           "fee": dl.get("fee", 0), "freeOver": dl.get("freeOver", 0), "api": CFG.get("apiUrl") or CFG.get("offersUrl") or "", "camp": CAMP}
     v = CFG.get("voucher")
     ann = list(CFG.get("announcements") or ["Cash on delivery all over Pakistan"])

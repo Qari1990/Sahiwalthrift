@@ -146,3 +146,74 @@ function up(e){var was=g;delete pts[e.pointerId];
  if(sc<1.02&&ids().length===0){sc=1;tx=ty=0;apply(true)}
  begin()}
 })();
+// ---------- Engagement: share, follow, WhatsApp new-arrivals list ----------
+(function(){
+var T=window.TP||{},R=T.root||'',FB=T.fb||'https://www.facebook.com/abcthrift.store',WA=T.wa||'923114139007';
+function q(s,r){return (r||document).querySelector(s)}
+function get(k,d){try{var v=localStorage.getItem('tp-'+k);return v?JSON.parse(v):d}catch(e){return d}}
+function put(k,v){try{localStorage.setItem('tp-'+k,JSON.stringify(v))}catch(e){}}
+function ev(n,d){try{if(window.fbq)fbq('trackCustom',n,d||{})}catch(e){}}
+function wa(t){return 'https://wa.me/'+WA+'?text='+encodeURIComponent(t)}
+// the welcome-voucher popup opens at ~9s: never stack on top of it
+function busy(){var p=document.getElementById('pop');return (p&&performance.now()<12000)||(p&&!p.hidden)||q('.flw.on,.nudge.on,.bag.on,[aria-modal="true"]:not([hidden])')}
+function h(html){var d=document.createElement('div');d.innerHTML=html;return d.firstChild}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return '&#'+c.charCodeAt(0)+';'})}
+var JOIN='Hi ABCThrift! Please add me to your new arrivals updates on WhatsApp.';
+var IC={wa:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Z"/></svg>',
+ fb:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 8.5V6.8c0-.8.2-1.3 1.4-1.3H17V2.3c-.3 0-1.3-.1-2.5-.1-2.5 0-4.2 1.5-4.2 4.3v2H7.6v3.6h2.7V22H14v-9.9h2.8l.4-3.6H14Z"/></svg>',
+ ln:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'};
+// visits count (for when to show the follow card)
+var vis=get('visits',0)+1;put('visits',vis);
+
+// 1) Product page: share with friends + ask about this piece
+var buy=q('.pd [data-buy]');
+if(buy){
+ var it={};try{it=JSON.parse(buy.dataset.buy)}catch(e){}
+ var url=location.href.split('#')[0].split('?')[0]+'?utm_source=share&utm_medium=whatsapp';
+ var name=(it.b?it.b+' ':'')+(it.n||document.title);
+ var price=q('.pp.camp b')&&document.body.classList.contains('camp-live')?q('.pp.camp b').textContent:(it.p?'Rs '+Number(it.p).toLocaleString('en-PK'):'');
+ var house=/ABCThrift Select/i.test(it.b||'');
+ var msg='Look what I found on ABCThrift: '+name+(it.s?', size '+it.s:'')+(price?', '+price:'')+(house?'. Hand-picked, only 1 piece. ':'. Original brand, only 1 piece. ')+url;
+ var box=h('<div class="shr"><span class="shr-t">Ask a friend: should I buy this?</span><div class="shr-b">'+
+  '<a class="shr-wa" target="_blank" rel="noopener" href="https://wa.me/?text='+encodeURIComponent(msg)+'">'+IC.wa+'WhatsApp</a>'+
+  '<a class="shr-fb" target="_blank" rel="noopener" href="https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(url.replace('medium=whatsapp','medium=facebook'))+'">'+IC.fb+'Facebook</a>'+
+  '<button type="button" class="shr-cp">'+IC.ln+'<span>Copy link</span></button></div></div>');
+ var anchor=q('.pd .ask')||q('.pd .cta');anchor.parentNode.insertBefore(box,anchor.nextSibling);
+ box.addEventListener('click',function(e){var a=e.target.closest('a,button');if(!a)return;
+  if(a.classList.contains('shr-cp')){e.preventDefault();var done=function(){a.querySelector('span').textContent='Link copied'};
+   if(navigator.share){navigator.share({title:name,text:msg.replace(' '+url,''),url:url}).catch(function(){})}
+   else if(navigator.clipboard){navigator.clipboard.writeText(url).then(done,done)}else{prompt('Copy this link',url)}}
+  ev('SharePiece',{method:a.className,content_ids:[it.sku]})});
+ // after 25s on a piece, one gentle offer to send the brand-tag photo (once per visit)
+ if(!sessionStorage.getItem('tp-nudge')){setTimeout(function tryN(){if(q('.nudge'))return;if(document.hidden||busy())return setTimeout(tryN,8000);sessionStorage.setItem('tp-nudge','1');
+  var n=h('<div class="nudge" role="dialog" aria-label="Ask about this piece"><button type="button" class="nudge-x" aria-label="Close">×</button><b>Want a closer look?</b><span>We can send you a photo of the brand tag and measurements of this exact piece on WhatsApp.</span><a target="_blank" rel="noopener" href="'+wa('Hi! Please send me the brand tag photo and measurements of '+name+' ('+(it.sku||'')+'). '+url.split('?')[0])+'">'+IC.wa+'Ask on WhatsApp</a></div>');
+  document.body.appendChild(n);requestAnimationFrame(function(){n.classList.add('on')});
+  n.addEventListener('click',function(e){if(e.target.closest('.nudge-x')){n.remove()}else if(e.target.closest('a')){ev('AskTagPhoto',{content_ids:[it.sku]});n.remove()}})},25000)}
+}
+
+// 2) Homepage: "Never miss a drop" block with the Facebook page (follow button) and the WhatsApp list
+var hiw=q('section.conds')||q('section.faqs');
+if(hiw&&q('#shop')&&q('section.hiw')){
+ var blk=h('<section class="drops"><div class="drops-in"><div class="drops-txt"><span class="drops-k">One piece of each, gone when it is sold</span><h2>Never miss a new drop</h2><p>We add new hand-picked pieces every week. Followers see them first, before they sell out.</p>'+
+  '<div class="drops-b"><a class="d-fb" target="_blank" rel="noopener" href="'+FB+'">'+IC.fb+'Follow on Facebook</a><a class="d-wa" target="_blank" rel="noopener" href="'+wa(JOIN)+'">'+IC.wa+'Get new arrivals on WhatsApp</a></div>'+
+  '<small>WhatsApp updates only if you ask for them. Reply STOP any time.</small></div><div class="drops-fb" aria-hidden="true"></div></div></section>');
+ hiw.parentNode.insertBefore(blk,hiw);
+ blk.addEventListener('click',function(e){var a=e.target.closest('a');if(a){ev(a.classList.contains('d-fb')?'FollowFacebook':'JoinWhatsApp',{place:'home'});put('followed',Date.now())}});
+ // Facebook page box (real Follow button), loaded only when scrolled near it
+ var slot=q('.drops-fb',blk),load=function(){if(slot.firstChild)return;var w=Math.min(500,Math.max(280,slot.clientWidth||320));
+  slot.innerHTML='<iframe title="ABCThrift on Facebook" src="https://www.facebook.com/plugins/page.php?href='+encodeURIComponent(FB)+'&tabs=&width='+w+'&height=180&small_header=false&adapt_container_width=true&hide_cover=false&show_facepile=true" width="'+w+'" height="180" style="border:none;overflow:hidden;max-width:100%" scrolling="no" frameborder="0" allowfullscreen="true" loading="lazy" allow="encrypted-media"></iframe>';slot.removeAttribute('aria-hidden')};
+ if('IntersectionObserver' in window){var io=new IntersectionObserver(function(es){if(es[0].isIntersecting){load();io.disconnect()}},{rootMargin:'400px'});io.observe(slot)}else load();
+}
+
+// 3) Follow card: shown once after some browsing; dismissed = hidden 4 days, followed = hidden 60 days
+var hide=get('follow-hide',0),fol=get('followed',0),page=location.pathname;
+if(Date.now()>hide&&Date.now()-fol>60*864e5&&!/track|wishlist|404/.test(page)){
+ var shown=0,show=function(){if(shown)return;if(document.hidden||busy())return setTimeout(show,15000);shown=1;
+  var c=h('<div class="flw" role="dialog" aria-label="Follow ABCThrift"><button type="button" class="flw-x" aria-label="Close">×</button><img src="'+R+'logo.png" alt="" width="44" height="44"><div><b>New pieces every week</b><span>Every piece is one of one. Follow us to see new jackets, hoodies and kids winter wear before they sell.</span><div class="flw-b"><a class="d-fb" target="_blank" rel="noopener" href="'+FB+'">'+IC.fb+'Follow</a><a class="d-wa" target="_blank" rel="noopener" href="'+wa(JOIN)+'">'+IC.wa+'WhatsApp updates</a></div></div></div>');
+  document.body.appendChild(c);requestAnimationFrame(function(){c.classList.add('on')});
+  c.addEventListener('click',function(e){if(e.target.closest('.flw-x')){put('follow-hide',Date.now()+4*864e5);c.remove()}else{var a=e.target.closest('a');if(a){ev(a.classList.contains('d-fb')?'FollowFacebook':'JoinWhatsApp',{place:'card'});put('followed',Date.now());c.remove()}}})};
+ // first visit: after 40s or 65% scroll; returning visitor: after 20s
+ setTimeout(show,vis>1?20000:40000);
+ window.addEventListener('scroll',function s(){var d=document.documentElement;if((d.scrollTop+innerHeight)/d.scrollHeight>.65){window.removeEventListener('scroll',s);setTimeout(show,1500)}},{passive:true});
+}
+})();
