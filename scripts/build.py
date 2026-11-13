@@ -310,6 +310,10 @@ def kids_age(it):
     return KIDS_LETTER.get(norm_size(s))
 
 
+SLEEVELESS = re.compile(r"\bvests?\b|gilet|sleeveless|body ?warmer|waistcoat", re.I)
+def sleeveless(it): return bool(SLEEVELESS.search(f"{it.get('category', '')} {it.get('title', '')} {it.get('name', '')}"))
+
+
 def card_data(it):
     """What the size card shows: (measurements, exact?, big box label, big box value, source line, note line)."""
     m = {k: it["meas"][k] for k in ("chest", "length", "shoulder", "sleeve") if it["meas"].get(k)}
@@ -348,6 +352,8 @@ def size_image(it, out, photo=None):
     small source line (measured from the item / brand size chart / standard sizes). No tape data -> approximate (≈) values."""
     W, H = 1080, 1350; G, BG, CR, MUT = (233, 196, 106), (18, 32, 27), (244, 234, 210), (201, 214, 209)
     m, exact, flab, fval, source, note = card_data(it)
+    vest = sleeveless(it)
+    if vest: m.pop("sleeve", None)  # sleeveless vest: no arm length (WAQAR, 13 Nov)
     pre = "" if exact else "≈"
     im = Image.new("RGB", (W, H), BG)
     glow = Image.new("L", (W, H), 0); gd = ImageDraw.Draw(glow); gd.ellipse((-500, -650, 820, 520), fill=55); gd.ellipse((700, 950, 1500, 1750), fill=28)
@@ -380,10 +386,11 @@ def size_image(it, out, photo=None):
     s, ox, oy = 560 / 600, 480, 240
     P = lambda x, y: (ox + x * s, oy + y * s)
     neck = [P(250 + 100 * t, 48 + 100 * t * (1 - t)) for t in [i / 12 for i in range(13)]]
-    pts = neck + [P(*q) for q in ((425, 68), (565, 328), (508, 358), (412, 200), (408, 522), (192, 522), (188, 200), (92, 358), (35, 328), (175, 68))]
+    pts = neck + [P(*q) for q in (((425, 68), (440, 120), (412, 210), (408, 522), (192, 522), (188, 210), (160, 120), (175, 68)) if vest else
+                                  ((425, 68), (565, 328), (508, 358), (412, 200), (408, 522), (192, 522), (188, 200), (92, 358), (35, 328), (175, 68)))]
     ov = Image.new("RGBA", (W, H), (0, 0, 0, 0)); od = ImageDraw.Draw(ov); od.polygon(pts, fill=(255, 255, 255, 16)); im.paste(ov, (0, 0), ov)
     d.line(pts + [pts[0]], fill=CR, width=3, joint="curve")
-    d.line([P(188, 200), P(192, 522)], fill=(80, 92, 86), width=2); d.line([P(412, 200), P(408, 522)], fill=(80, 92, 86), width=2)
+    if not vest: d.line([P(188, 200), P(192, 522)], fill=(80, 92, 86), width=2); d.line([P(412, 200), P(408, 522)], fill=(80, 92, 86), width=2)
     import math
     def arrow(a, b_):
         (x1, y1), (x2, y2) = P(*a), P(*b_); d.line((x1, y1, x2, y2), fill=G, width=4)
@@ -470,7 +477,7 @@ def load_items(items_dir):
         if brand.islower(): brand = brand.title()
         specs = [s for s in (c.get("specs") or []) if s.get("value") and not re.match(r"(?i)^(sku|condition|grade|delivery|price)$", s.get("label", "")) and not NEG.search(str(s["value"]))]
         raw = d.get("meas") or {}
-        meas = {k: raw[k] for k in MEAS_KEYS if raw.get(k)}
+        meas = {k: raw[k] for k in MEAS_KEYS if raw.get(k) and not (k == "sleeve" and SLEEVELESS.search(f"{d.get('category', '')} {c.get('title', '')}"))}
         retail = d.get("retailPkr") or 0
         items.append({
             "sku": d["sku"], "status": d["status"], "price": d.get("price") or 0, "retailPkr": retail if retail > (d.get("price") or 0) else 0,
