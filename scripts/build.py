@@ -200,16 +200,132 @@ def studio(cut, bg, size=1200):
 
 
 # ---------- data ----------
+MEAS_KEYS = ("chest", "length", "shoulder", "sleeve", "waist", "inseam")
+MEAS_LABEL = {"chest": "Chest (armpit to armpit)", "length": "Length (shoulder to hem)", "shoulder": "Shoulder (seam to seam)",
+              "sleeve": "Sleeve (shoulder to cuff)", "waist": "Waist (flat, side to side)", "inseam": "Inseam"}
+ADULT = ["XS", "S", "M", "L", "XL", "XXL", "3XL"]
+
+
+def size_rank(s):
+    """Sort sizes the way shoppers expect: XS..3XL, then numbers, then kids ages."""
+    u = str(s).upper().replace("2XL", "XXL").replace("XXXL", "3XL")
+    if u in ADULT: return (0, ADULT.index(u), 0)
+    m = re.match(r"(\d+)", u)
+    if m and "Y" in u: return (2, int(m.group(1)), 0)
+    if m: return (1, int(m.group(1)), 0)
+    return (3, 0, u)
+
+
+# Brand size charts: BODY chest in inches per tag size (same data as the Landa Lister tool, checked online 13 Nov 2026).
+BRAND_CHARTS = [
+    (r"\bobey\b", "OBEY", {"S": (35, 37), "M": (38, 40), "L": (41, 43), "XL": (44, 46), "XXL": (47, 49)}),
+    (r"american eagle|^ae$", "American Eagle", {"XS": (35, 36), "S": (37, 39), "M": (40, 42), "L": (43, 45), "XL": (46, 48), "XXL": (49, 51), "3XL": (52, 54)}),
+    (r"bershka", "Bershka", {"XS": (33, 35.5), "S": (35.5, 37.8), "M": (37.8, 40.2), "L": (40.2, 42.5), "XL": (42.5, 44.9)}),
+    (r"h\s*&\s*m|^hm$", "H&M", {"XS": (30.7, 33.9), "S": (33.9, 37), "M": (37, 40.2), "L": (40.2, 43.3), "XL": (43.3, 46.5), "XXL": (46.5, 49.6), "3XL": (49.6, 52.8)}),
+    (r"quechua|decathlon", "Decathlon", {"XS": (33.1, 34.3), "S": (34.6, 35.8), "M": (36.2, 37.4), "L": (37.8, 40.6), "XL": (40.9, 44.5), "XXL": (44.9, 48.4), "3XL": (48.8, 53.1)}),
+]
+STD_CHART = {"XS": (33, 36), "S": (36, 38.5), "M": (38.5, 41), "L": (41, 44), "XL": (44, 47), "XXL": (47, 50), "3XL": (50, 53)}
+KIDS_HEIGHT = {2: (92, 98), 3: (98, 104), 4: (104, 110), 5: (110, 116), 6: (116, 122), 7: (122, 128), 8: (128, 134), 9: (134, 140), 10: (140, 146), 11: (146, 152), 12: (152, 158), 13: (158, 164)}
+
+
+def norm_size(z):
+    u = str(z or "").upper().replace(" ", "").replace("2XL", "XXL").replace("XXXL", "3XL")
+    return u if u in ADULT else ""
+
+
+def brand_chart(brand):
+    for rx, name, ch in BRAND_CHARTS:
+        if re.search(rx, str(brand or "").strip(), re.I): return name, ch
+    return "", None
+
+
+def ease(it): return 6 if re.search(r"puffer|coat|jacket|leather|denim|parka|vest", it.get("category") or "", re.I) and not re.search(r"hood", it.get("category") or "", re.I) else 4
+
+
+def fit_from_chest(pit, it=None):
+    """Same rule as the Landa Lister tool: body chest = garment pit-to-pit x 2 minus ease, matched to the brand chart (else a standard chart)."""
+    if not pit: return ""
+    it = it or {}; body = pit * 2 - ease(it); ch = brand_chart(it.get("brand"))[1] or STD_CHART
+    return min(ch, key=lambda k: 0 if ch[k][0] <= body <= ch[k][1] else min(abs(body - ch[k][0]), abs(body - ch[k][1])))
+
+
+def fits_like(it):
+    """'Fits like' size for adults: the seller's own call if given, else from the measured chest. One step away from the tag shows a range."""
+    if it.get("fits"): return it["fits"]
+    if it["gender"] == "Kids" or not it["meas"].get("chest"): return ""
+    f = fit_from_chest(it["meas"]["chest"], it); t = str(it["size"]).upper().replace("2XL", "XXL")
+    if t in ADULT and f in ADULT and abs(ADULT.index(t) - ADULT.index(f)) == 1:
+        a, b = sorted((t, f), key=ADULT.index); return f"{a}-{b}"
+    return f
+
+
+def inch(v): return f"{v:g}\""
+
+
+MEASURE_SVG = """<svg class="msvg" viewBox="0 0 600 560" role="img" aria-label="How we measure: chest, length, shoulder and sleeve"><defs><marker id="ma" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b8860b"/></marker></defs>
+<path d="M250,48 Q300,98 350,48 L425,68 L565,328 L508,358 L412,200 L408,522 L192,522 L188,200 L92,358 L35,328 L175,68 Z" fill="#f6f3ec" stroke="#1d2b26" stroke-width="3" stroke-linejoin="round"/>
+<g stroke="#b8860b" stroke-width="4" marker-start="url(#ma)" marker-end="url(#ma)"><line x1="180" y1="82" x2="420" y2="82"/><line x1="194" y1="215" x2="406" y2="215"/><line x1="232" y1="64" x2="232" y2="516"/><line x1="440" y1="78" x2="548" y2="320"/></g>
+<g font-family="Inter,system-ui,sans-serif" font-size="25" font-weight="800" fill="#1d2b26" text-anchor="middle"><text x="310" y="122">{shoulder}</text><text x="310" y="255">{chest}</text><text transform="translate(272,400) rotate(-90)">{length}</text><text transform="translate(532,170) rotate(66)">{sleeve}</text></g></svg>"""
+
+
+def measure_svg(m=None):
+    m = m or {}
+    lab = lambda k, n: f"{n} {inch(m[k])}" if m.get(k) else n
+    return MEASURE_SVG.format(shoulder=lab("shoulder", "Shoulder"), chest=lab("chest", "Chest"), length=lab("length", "Length"), sleeve=lab("sleeve", "Sleeve"))
+
+
+def chart_note(it):
+    """No tape measurements yet: tell the shopper what the tag size normally fits, from the brand's chart or a standard chart."""
+    t = norm_size(it["size"])
+    if it["gender"] == "Kids" or not t:
+        m = re.match(r"(\d+)", str(it["size"])); h = KIDS_HEIGHT.get(int(m.group(1))) if m and "Y" in str(it["size"]).upper() else None
+        return f'<p class="chartnote">Kids size {esc(it["size"])} usually fits a child about {h[0]}–{h[1]} cm tall (standard EU kids sizing).</p>' if h else ""
+    name, ch = brand_chart(it["brand"]); lo, hi = (ch or STD_CHART).get(t, (0, 0))
+    if not lo: return ""
+    cm = f"{round(lo * 2.54)}–{round(hi * 2.54)} cm"
+    src = f"{esc(name)} size chart" if ch else "Standard size chart"
+    return f'<p class="chartnote"><b>{src}:</b> size {t} fits a body chest of about {lo:g}–{hi:g}″ ({cm}).</p>'
+
+
+def size_block(it):
+    m = it["meas"]; f = fits_like(it)
+    rows = "".join(f'<tr><th>{esc(MEAS_LABEL[k])}</th><td><b>{inch(v)}</b> <span class="muted">{round(v * 2.54)} cm</span></td></tr>' for k, v in m.items())
+    top = f'<div class="szrow"><div><small>Tag size</small><b>{esc(it["size"] or "-")}</b></div>{f"<div class=fit><small>Fits like</small><b>{esc(f)}</b></div>" if f else ""}</div>'
+    if not m:
+        return f'{top}{chart_note(it)}<p>This piece has not been hand-measured yet. Send the item code {esc(it["sku"])} on WhatsApp and we will measure it for you. <a href="../size-guide.html">Size guide</a></p>'
+    full = f' Chest all round is about {inch(round(m["chest"] * 2))}.' if m.get("chest") else ""
+    show = {k: m[k] for k in ("chest", "length", "shoulder", "sleeve") if m.get(k)}
+    pic = f'<figure class="mfig">{measure_svg(show)}<figcaption>How we measure: the piece is laid flat and measured in inches.</figcaption></figure>' if show else ""
+    return f"""{top}<table class="mtab">{rows}</table>
+<p>Measured by hand, laid flat.{full} Lay a top that fits you well flat and compare. <a href="../size-guide.html">Size guide</a>. Still unsure? Ask on WhatsApp.</p>{pic}"""
+
+
+OVERRIDES = json.loads((Path(__file__).parent / "size_overrides.json").read_text()) if (Path(__file__).parent / "size_overrides.json").exists() else {}
+
+
+def swap_size(v, old, new):
+    """Replace 'Size L' style mentions in listing text when the size is corrected (mirror of the tool's swapSize)."""
+    if isinstance(v, str): return re.sub(rf"(\bsize:?\s*\*?){re.escape(old)}(?![\w-])", rf"\g<1>{new}", v, flags=re.I)
+    if isinstance(v, list): return [({**x, "value": new if x.get("value") == old else swap_size(x.get("value"), old, new)} if isinstance(x, dict) and re.match(r"(?i)^size", x.get("label", "")) else swap_size(x, old, new)) for x in v]
+    if isinstance(v, dict): return {k: swap_size(x, old, new) for k, x in v.items()}
+    return v
+
+
 def load_items(items_dir):
     items = []
     for f in sorted(Path(items_dir).glob("*.json")):
         d = json.loads(f.read_text()); d = d.get("data", d)
         if d.get("status") not in LIVE: continue
+        o = OVERRIDES.get(d.get("sku"), {})
+        if o:
+            if o.get("size") and o["size"] != d.get("size"): d = {**d, "copy": swap_size(d.get("copy") or {}, d.get("size") or "", o["size"])}
+            d = {**d, **{k: v for k, v in o.items() if k in ("size", "fitsLike")}, "meas": {**(d.get("meas") or {}), **o.get("meas", {})}}
         c = d.get("copy") or {}
         brand = (d.get("brand") or "").strip() or CFG["houseLabel"]
         if brand.islower(): brand = brand.title()
         specs = [s for s in (c.get("specs") or []) if s.get("value") and not re.match(r"(?i)^(sku|condition|grade|delivery|price)$", s.get("label", "")) and not NEG.search(str(s["value"]))]
-        meas = {k: v for k, v in (d.get("meas") or {}).items() if v}
+        raw = d.get("meas") or {}
+        meas = {k: raw[k] for k in MEAS_KEYS if raw.get(k)}
         retail = d.get("retailPkr") or 0
         items.append({
             "sku": d["sku"], "status": d["status"], "price": d.get("price") or 0, "retailPkr": retail if retail > (d.get("price") or 0) else 0,
@@ -217,7 +333,7 @@ def load_items(items_dir):
             "brand": brand, "name": clean_name(c.get("title") or "", brand, d.get("size") or "", d.get("category") or "Clothing"),
             "origin": ((d.get("ai") or {}).get("identified") or {}).get("brand_origin") or "", "hl": highlights(d), "category": d.get("category") or "Clothing", "gender": d.get("gender") or "", "size": d.get("size") or "",
             "color": d.get("color") or "", "cond": cond_label(d), "fix": fix_note(d), "desc": positive(c.get("description_en")),
-            "specs": specs, "meas": meas, "images": d.get("images") or [], "kinds": d.get("photoKind") or {}, "created": d.get("createdAt") or "", "updated": d.get("updatedAt") or d.get("createdAt") or "",
+            "specs": specs, "meas": meas, "fits": (d.get("fitsLike") or "").strip(), "images": d.get("images") or [], "kinds": d.get("photoKind") or {}, "created": d.get("createdAt") or "", "updated": d.get("updatedAt") or d.get("createdAt") or "",
             "material": next((s["value"] for s in specs if re.match(r"(?i)^(material|shell|fabric)$", s.get("label", ""))), ""),
         })
     return sorted(items, key=lambda i: i["created"], reverse=True)
@@ -544,7 +660,6 @@ def return_ld():
 def product_page(it, all_items, n_imgs):
     sku = it["sku"]; sold = it["status"] == "Sold"; deal = DEAL.get("sku") == sku and not sold
     imgs = [f"../img/{sku}-{i}.jpg" for i in range(1, n_imgs + 1)]
-    meas = " · ".join(f"{k.title()} {v}\"" for k, v in it["meas"].items())
     related = [o for o in all_items if o["sku"] != sku and o["status"] != "Sold" and (o["category"] == it["category"] or o["gender"] == it["gender"])][:4]
     alt = it["brand"] + " " + it["name"]
     ai = it.get("ai_idx", set())
@@ -569,7 +684,7 @@ def product_page(it, all_items, n_imgs):
 <section class="pd"><div class="gal"><div class="gal-wrap"><div class="gal-main" id="gal">{gallery}</div>{f'<button type="button" class="zoom-btn" data-zoom aria-label="View photos full screen">{ZOOM_ICON}<span class="zh-d">Hover to zoom · click for full screen</span><span class="zh-m">Tap to zoom</span></button>' if imgs else ''}</div>{f'<div class="gal-th">{thumbs}</div>' if thumbs else ''}</div>
 <div class="info"><div class="ptop"><span class="pbrand">{esc(it['brand'])}</span>{f'<span class="porigin">Brand from {esc(it["origin"])}</span>' if it['origin'] else ''}<button type="button" class="pwish" data-wish="{bag_data(it)}" aria-label="Save to wishlist">{SVG['heart']}</button></div>
 <h1 class="pname">{esc(it['name'])}</h1>
-<div class="tags"><a class="tag ok" href="../condition-guide.html">✓ {esc(it['cond'])}</a>{f'<span class="tag">Size {esc(it["size"])}</span>' if it['size'] else ''}{f'<span class="tag">{esc(it["gender"])}</span>' if it['gender'] else ''}<span class="tag">{'Sold out' if sold else 'Only 1 piece'}</span></div>
+<div class="tags"><a class="tag ok" href="../condition-guide.html">✓ {esc(it['cond'])}</a>{f'<span class="tag">Size {esc(it["size"])}{" · Chest " + inch(it["meas"]["chest"]) if it["meas"].get("chest") else ""}</span>' if it['size'] else ''}{f'<span class="tag">{esc(it["gender"])}</span>' if it['gender'] else ''}<span class="tag">{'Sold out' if sold else 'Only 1 piece'}</span></div>
 {f'<div class="dealbar dl"><b>Deal of the Day</b><span>Extra {CFG["deal"]["extraPct"]}% off for today only · ends in <time data-countdown></time></span></div>' if deal else ''}
 {f'<a class="dealbar campdeal camp{" dl-reg" if deal else ""}" href="../deals.html"><b>{esc(CAMP["name"])}: {CAMP["pct"]}% off this piece</b><span>Sale ends in <time data-camp-left></time> · plus bundle savings</span></a>' if CAMP and not sold else ''}
 <div class="pp-wrap">{price_html(it, "pp")}</div>
@@ -577,7 +692,7 @@ def product_page(it, all_items, n_imgs):
 {'<p class="soldmsg">This item has been sold. See similar items below or ask us on WhatsApp.</p>' if sold else f'<div class="cta">{buy}<button type="button" class="addbag" data-add="{bag_data(it)}">Add to bag</button></div>{ask}' + offer_box(it)}
 <ul class="perks"><li><b>Cash on delivery</b><span>Pay when the parcel arrives</span></li><li><b>Delivery</b><span>{esc(delivery_line())}</span></li><li><b>Easy exchange</b><span><a href="../returns.html">{CFG.get('returns', {}).get('days', 3)}-day exchange</a> if it doesn't match</span></li><li><b>Bundle &amp; save</b><span>{esc(bundle_line())}</span></li></ul>
 <section class="pdesc"><h2>About this piece</h2>{f'<p class="lead">{esc(it["desc"])}</p>' if it['desc'] else ''}<p class="muted">{esc(seo_blurb(it))}</p>{f'<h3>Highlights</h3><ul class="hl">{hl}</ul>' if hl else ''}{f'<p class="muted">{esc(it["fix"])}</p>' if it['fix'] else ''}</section>
-{f'<details open><summary>Size &amp; fit</summary><p>Size {esc(it["size"])}{". Measurements: " + esc(meas) if meas else ""}. Compare with a garment you own. <a href="../size-guide.html">Size guide</a>. Questions about size? Ask on WhatsApp and we will measure it for you.</p></details>' if it['size'] else ''}
+<details open class="szfit"><summary>Size &amp; measurements</summary>{size_block(it)}</details>
 <details><summary>Details</summary><dl>{''.join(f'<dt>{esc(k)}</dt><dd>{esc(v)}</dd>' for k, v in details)}<dt>Item code</dt><dd>{esc(sku)}</dd></dl></details>
 <details><summary>Delivery &amp; payment</summary><p>{esc(delivery_line())} Cash on delivery: pay when the parcel arrives. <a href="../shipping.html">More</a></p></details>
 <details><summary>How to order</summary><p>1. Tap "Buy now", or "Add to bag" for several items and check out together.<br>2. Enter your name, phone, city and address.<br>3. Place the order on the site or on WhatsApp; we confirm it.<br>4. Pay when the parcel arrives (COD).</p></details>
@@ -764,7 +879,7 @@ def deals_page(items):
 
 def index_page(items):
     live = [i for i in items if i["status"] != "Sold"]
-    cats = sorted({i["category"] for i in items}); sizes = [s for s in dict.fromkeys(i["size"] for i in live) if s]
+    cats = sorted({i["category"] for i in items}); sizes = sorted({i["size"] for i in live if i["size"]}, key=size_rank)
     brands = sorted({i["brand"] for i in live}, key=lambda b: (-sum(i["brand"] == b for i in live), b))
     d = next((i for i in live if i["sku"] == DEAL.get("sku")), None)
     deal = f"""<section id="deal" class="deal dl"><a class="deal-img" href="p/{esc(d['sku'])}.html">{f'<img src="img/t/{d["sku"]}-1.jpg" alt="{esc(alt_text(d))}" loading="lazy" decoding="async" width="600" height="600">' if d['images'] else ''}</a>
@@ -852,11 +967,21 @@ def top_brands(items, n=5):
     return ", ".join(seen[:n]) or "international labels"
 
 
+def size_chips(sizes):
+    """Quick size filter on landing pages (category, brand, gender): tap a size to show only those pieces."""
+    if len(sizes) < 2: return ""
+    return '<div class="chips szchips" role="group" aria-label="Filter by size"><span>Size:</span>' + "".join(f'<button type="button" data-sz="{esc(s)}">{esc(s)}</button>' for s in ["All", *sizes]) + "</div>"
+
+
+SIZE_CHIP_JS = """<script>(function(){var b=document.querySelectorAll('[data-sz]');b.forEach(function(x){x.onclick=function(){var v=x.dataset.sz;b.forEach(function(y){y.setAttribute('aria-pressed',y===x)});
+document.querySelectorAll('.coll > .grid .card').forEach(function(c){c.hidden=v!=='All'&&c.dataset.size!==v})}});b[0]&&b[0].setAttribute('aria-pressed','true')})()</script>"""
+
+
 def list_page(slug, h1, title, desc, intro, its, depth, crumbs_extra=(), filter_q=None, skip=""):
     """A crawlable landing page: unique heading and intro, the matching items, links to related pages, CollectionPage + ItemList schema."""
     up = "../" * depth; base = CFG["siteUrl"].rstrip("/")
     live = [i for i in its if i["status"] != "Sold"]; sold = [i for i in its if i["status"] == "Sold"][:8]
-    sizes = [s for s in dict.fromkeys(i["size"] for i in live) if s]
+    sizes = sorted({i["size"] for i in live if i["size"]}, key=size_rank)
     intro = intro.format(brands=top_brands(live), sizes=", ".join(sizes[:8]) or "all sizes")
     prices = [i["price"] for i in live]
     facts = f"{len(live)} piece{'s' if len(live) != 1 else ''} in stock" + (f", from {rs(min(prices))} to {rs(max(prices))}" if prices else "") + ". Cash on delivery all over Pakistan."
@@ -865,14 +990,14 @@ def list_page(slug, h1, title, desc, intro, its, depth, crumbs_extra=(), filter_
     crumb_html = " / ".join(f'<a href="{up}{esc(u[len(base) + 1:]) or "index.html"}">{esc(n)}</a>' for n, u in crumbs[:-1]) + f" / <span>{esc(h1)}</span>"
     filt = f'<p><a class="o-link" href="{esc(shop_link(up, **filter_q))}">Filter by size, price and condition</a></p>' if filter_q else ""
     body = f"""<section class="shop coll"><nav class="crumbs">{crumb_html}</nav><h1>{esc(h1)}</h1><p class="lead">{esc(intro)}</p><p class="muted">{esc(facts)}</p>{filt}
-<div class="grid">{''.join(card(i, up) for i in live)}</div>
+{size_chips(sizes)}<div class="grid">{''.join(card(i, up) for i in live)}</div>
 {f'<h2>Recently sold</h2><p class="muted">These have found a new home. New stock is added every week.</p><div class="grid">{"".join(card(i, up) for i in sold)}</div>' if sold else ''}</section>
 {popular_block(up, skip)}"""
     ld = [{"@context": "https://schema.org", "@type": "CollectionPage", "name": h1, "url": url, "description": desc, "isPartOf": {"@id": base + "/#website"},
            "mainEntity": {"@type": "ItemList", "numberOfItems": len(live), "itemListElement": [{"@type": "ListItem", "position": n, "url": f"{base}/p/{i['sku']}.html", "name": full_name(i)} for n, i in enumerate(live, 1)]}},
           breadcrumb_ld(crumbs)]
     img = next((f"img/{i['sku']}-1.jpg" for i in live if i["images"]), None)
-    return page(f"{title} | {CFG['storeName']}", desc, body, depth, img, slug, None, index_badges_js(), ld, img_alt=h1)
+    return page(f"{title} | {CFG['storeName']}", desc, body, depth, img, slug, None, index_badges_js() + (SIZE_CHIP_JS if len(sizes) > 1 else ""), ld, img_alt=h1)
 
 
 def brand_pages(items):
@@ -992,9 +1117,13 @@ def info_pages():
     P["condition-guide"] = ("Condition guide", "We check every item ourselves and give it one of these grades.", "".join(f'<div class="cg"><b>{esc(c)}</b><p>{esc(COND_NOTE[c])}</p></div>' for c in CONDS) + """
 <p>Every item is washed, pressed and checked by hand. Photos show the actual item. For more photos or a video, send the item code on WhatsApp.</p>""")
     P["size-guide"] = ("Size guide", "International brands size differently, so please compare measurements.", """
-<h2>How to measure</h2><p>Lay a shirt or jacket that fits you well flat on the floor. <b>Chest</b>: straight across from armpit to armpit. <b>Length</b>: from the highest point of the shoulder to the bottom hem. Compare these with the measurements on the item page.</p>
-<h2>Adults (approx.)</h2><table><thead><tr><th>Size</th><th>Chest (pit to pit)</th><th>Pakistani size</th></tr></thead><tbody>
-<tr><td>XS</td><td>17-18"</td><td>Small</td></tr><tr><td>S</td><td>19-20"</td><td>Small / Medium</td></tr><tr><td>M</td><td>20-21"</td><td>Medium</td></tr><tr><td>L</td><td>22-23"</td><td>Large</td></tr><tr><td>XL</td><td>24-25"</td><td>XL</td></tr><tr><td>XXL</td><td>26"+</td><td>XXL</td></tr></tbody></table>
+<h2>How we measure</h2><p>Every piece is laid flat and measured by hand in inches. Lay a top that fits you well flat on the floor and measure it the same way, then compare with the numbers on the item page.</p>
+<figure class="mfig">""" + measure_svg() + """</figure>
+<ul><li><b>Chest</b>: straight across, armpit to armpit. Double it for the full round.</li><li><b>Length</b>: from the highest point of the shoulder, next to the collar, down to the bottom hem.</li><li><b>Shoulder</b>: from one shoulder seam to the other, across the back.</li><li><b>Sleeve</b>: from the shoulder seam to the end of the cuff.</li></ul>
+<h2>Which size fits me? (adults, approx.)</h2><p>Use the garment's chest (armpit to armpit). Tag sizes differ between American, European and Asian brands, so the measured chest is the safest guide. On each item page we show the tag size and the size it fits like.</p>
+<table><thead><tr><th>Fits like</th><th>Garment chest (armpit to armpit)</th><th>Your body chest</th></tr></thead><tbody>
+<tr><td>XS</td><td>under 20"</td><td>under 36"</td></tr><tr><td>S</td><td>20-21"</td><td>36-38"</td></tr><tr><td>M</td><td>21.5-22.5"</td><td>39-40"</td></tr><tr><td>L</td><td>22.5-24"</td><td>41-43"</td></tr><tr><td>XL</td><td>24-25.5"</td><td>44-46"</td></tr><tr><td>XXL</td><td>25.5-27"</td><td>47-49"</td></tr><tr><td>3XL</td><td>27"+</td><td>50"+</td></tr></tbody></table>
+<p class="muted">Asian tags often use numbers: 90 = S, 95 = M, 100 = L, 105 = XL, 110 = XXL. European women's 36 = S, 38 = M, 40 = L, 42 = XL.</p>
 <h2>Kids (approx.)</h2><table><thead><tr><th>Age</th><th>Height</th></tr></thead><tbody><tr><td>1-2Y</td><td>80-92 cm</td></tr><tr><td>3-4Y</td><td>98-104 cm</td></tr><tr><td>5-6Y</td><td>110-116 cm</td></tr><tr><td>7-8Y</td><td>122-128 cm</td></tr><tr><td>9-10Y</td><td>134-140 cm</td></tr><tr><td>11-12Y</td><td>146-152 cm</td></tr></tbody></table>
 <p class="muted">These are approximate. Check each item's measurements on its page or ask on WhatsApp.</p>""")
     P["faq"] = ("FAQs", "Frequently asked questions.", "".join(f'<details><summary>{esc(q)}</summary><p>{a}</p></details>' for q, a in FAQ))

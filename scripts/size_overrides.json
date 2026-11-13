@@ -1,0 +1,9 @@
+{
+  "_note": "Website-only size fixes WAQAR approved (13 Nov 2026: use the tag size; tape measurements he sent). Remove an entry once the same change is saved in Landa Lister.",
+  "ST-SWE-0039": {"size": "S", "meas": {"chest": 20.5, "length": 26, "shoulder": 18.5, "sleeve": 23}},
+  "ST-PUF-0053": {"meas": {"chest": 24.5, "length": 25.5, "shoulder": 18, "sleeve": 25}},
+  "ST-SWE-0017": {"size": "S"},
+  "ST-SWE-0050": {"size": "M"},
+  "ST-DEN-0004": {"size": "L"},
+  "ST-PUF-0009": {"size": "M"}
+}
