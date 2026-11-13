@@ -295,58 +295,140 @@ def _f(w, px):
     return ImageFont.load_default()
 
 
-def size_image(it, out):
-    """One simple size-guide picture per product (WAQAR, 13 Nov): exact tape numbers when we have them,
-    otherwise the brand's (or a standard) S-XXL chest chart with this item's size highlighted. Kids: age vs height."""
-    W = 1200; BG, INK, GOLD, MUT, ROW = "#f6f3ec", "#1d2b26", "#b8860b", "#5d6b66", "#ebe4d3"
-    im = Image.new("RGB", (W, W), BG); d = ImageDraw.Draw(im)
-    def ctext(y, t, f, fill=INK): d.text((W / 2, y), t, font=f, fill=fill, anchor="mm")
-    ctext(90, "SIZE GUIDE", _f("Bold", 40), GOLD)
-    ctext(170, f"Size {it['size']}" if it["size"] else "Size", _f("ExtraBold", 92))
-    ctext(250, f"{it['brand']} · {it['sku']}", _f("Medium", 34), MUT)
-    m = {k: v for k, v in it["meas"].items() if k in ("chest", "length", "shoulder", "sleeve") and v}
-    t = norm_size(it["size"])
-    def table(head, rows, hi, y0, note):
-        cols = len(head); x0, x1 = 120, W - 120; cw = (x1 - x0) / cols; rh = min(96, int(560 / max(1, len(rows) + 1)))
-        d.rounded_rectangle((x0, y0, x1, y0 + rh), 18, fill=INK)
-        for c, h in enumerate(head): d.text((x0 + cw * c + cw / 2, y0 + rh / 2), h, font=_f("Bold", 34), fill="#ffffff", anchor="mm")
-        for r, row in enumerate(rows):
-            y = y0 + rh * (r + 1); on = r == hi
-            if on: d.rounded_rectangle((x0, y + 6, x1, y + rh - 6), 18, fill=GOLD)
-            elif r % 2 == 0: d.rectangle((x0, y + 6, x1, y + rh - 6), fill=ROW)
-            for c, v in enumerate(row): d.text((x0 + cw * c + cw / 2, y + rh / 2), v, font=_f("ExtraBold" if on else "SemiBold", 42 if c == 0 else 38), fill="#ffffff" if on else INK, anchor="mm")
-        yb = y0 + rh * (len(rows) + 1) + 40
-        for i, line in enumerate(note): ctext(yb + i * 46, line, _f("Medium", 32), MUT)
+# Approximate flat garment measurements (inches) by size, used only when the item has no tape measurements.
+GARMENT_MEN = {"XS": (26, 16.5, 24), "S": (27, 17.5, 24.5), "M": (28, 18.5, 25), "L": (29, 19.5, 25.5), "XL": (30, 20.5, 26), "XXL": (31, 21.5, 26.5), "3XL": (32, 22.5, 27)}
+GARMENT_WOMEN = {"XS": (23, 14.5, 22.5), "S": (24, 15, 23), "M": (25, 15.5, 23.5), "L": (26, 16.5, 24), "XL": (27, 17, 24.5), "XXL": (28, 18, 25), "3XL": (29, 19, 25.5)}
+KIDS_CHEST_CM = {2: 53, 3: 55, 4: 57, 5: 59, 6: 62, 7: 65, 8: 68, 9: 71, 10: 74, 11: 77, 12: 80, 13: 83}
+KIDS_LETTER = {"XS": 4, "S": 5, "M": 7, "L": 9, "XL": 11, "XXL": 13}
+EU_WOMEN = {"34": "XS", "36": "S", "38": "M", "40": "L", "42": "XL", "44": "XXL", "46": "3XL"}
+HALF = lambda v: round(v * 2) / 2
+
+
+def kids_age(it):
+    s = str(it["size"]).upper(); m = re.match(r"(\d+)", s)
+    if m and "Y" in s: return int(m.group(1))
+    return KIDS_LETTER.get(norm_size(s))
+
+
+def card_data(it):
+    """What the size card shows: (measurements, exact?, big box label, big box value, source line, note line)."""
+    m = {k: it["meas"][k] for k in ("chest", "length", "shoulder", "sleeve") if it["meas"].get(k)}
     if m:
-        rows = [(lab, f'{v:g}"', f"{round(v * 2.54)} cm") for k, lab in (("chest", "Chest (armpit to armpit)"), ("length", "Length (shoulder to hem)"), ("shoulder", "Shoulder (seam to seam)"), ("sleeve", "Sleeve (shoulder to cuff)")) if (v := m.get(k))]
-        f = fits_like(it)
-        d.rounded_rectangle((120, 320, W - 120, 420), 22, fill=GOLD)
-        ctext(370, "Measured by hand, laid flat" + (f"  ·  Fits like {f}" if f else ""), _f("Bold", 38), "#ffffff")
-        x0, x1 = 120, W - 120; rh = 110; y0 = 470
-        for r, (lab, a, b) in enumerate(rows):
-            y = y0 + r * rh
-            if r % 2 == 0: d.rounded_rectangle((x0, y, x1, y + rh - 10), 16, fill=ROW)
-            d.text((x0 + 30, y + rh / 2 - 5), lab, font=_f("SemiBold", 36), fill=INK, anchor="lm")
-            d.text((x1 - 210, y + rh / 2 - 5), a, font=_f("ExtraBold", 48), fill=INK, anchor="rm")
-            d.text((x1 - 30, y + rh / 2 - 5), b, font=_f("Medium", 34), fill=MUT, anchor="rm")
-        ctext(y0 + len(rows) * rh + 50, "Lay a top that fits you flat and compare.", _f("Medium", 32), MUT)
-    elif it["gender"] == "Kids" or not t:
-        ages = sorted(KIDS_HEIGHT); mm = re.match(r"(\d+)", str(it["size"])); a = int(mm.group(1)) if mm and "Y" in str(it["size"]).upper() else None
-        if a in KIDS_HEIGHT:
-            i = ages.index(a); pick = ages[max(0, i - 2): i + 3]
-            table(["Age", "Child height"], [(f"{x}-{x + 1}Y", f"{KIDS_HEIGHT[x][0]}-{KIDS_HEIGHT[x][1]} cm") for x in pick], pick.index(a), 320,
-                  ["Standard EU kids sizing.", "Want exact measurements? Ask us on WhatsApp."])
-        else:
-            rows = [(k, f'{lo:g}-{hi:g}"', f"{round(lo * 2.54)}-{round(hi * 2.54)} cm") for k, (lo, hi) in STD_CHART.items() if k in ("S", "M", "L", "XL", "XXL")]
-            table(["Size", "Chest (body)", "Chest (cm)"], rows, -1, 320, [f"Tag size {it['size']}. Standard size chart.", "Want exact measurements? Ask us on WhatsApp."])
-    else:
-        name, ch = brand_chart(it["brand"]); ch = ch or STD_CHART
-        keys = [k for k in ADULT if k in ch and (k in ("S", "M", "L", "XL", "XXL") or k == t)]
-        rows = [(k, f'{ch[k][0]:g}-{ch[k][1]:g}"', f"{round(ch[k][0] * 2.54)}-{round(ch[k][1] * 2.54)} cm") for k in keys]
-        table(["Size", "Chest (body)", "Chest (cm)"], rows, keys.index(t) if t in keys else -1, 320,
-              [f"{name} size chart." if name else "Standard size chart.", "Fits a person with this chest size.", "Want exact measurements? Ask us on WhatsApp."])
-    d.rectangle((0, W - 90, W, W), fill=INK)
-    ctext(W - 45, f"{CFG.get('domain', '')}  ·  WhatsApp {CFG.get('whatsapp', '')}", _f("SemiBold", 32), "#ffffff")
+        f = fits_like(it) or it["size"]; full = m.get("chest", 0) * 2
+        return m, True, "FITS LIKE", f, "Source: Original measurement", \
+            f"Measured flat in inches. Chest is armpit to armpit, so double it for the full round ({full:g}\")." if full else "Measured flat in inches."
+    kid = it["gender"] == "Kids" or (re.search(r"\d+\s*-?\s*\d*\s*Y", str(it["size"]), re.I) is not None)
+    if kid:
+        a = kids_age(it) or 8; a = min(max(a, 2), 13)
+        pit = HALF((KIDS_CHEST_CM[a] / 2.54 + 4) / 2)
+        m = {"chest": pit, "length": HALF(14.5 + 0.85 * (a - 2)), "shoulder": HALF(10 + 0.55 * (a - 2)), "sleeve": HALF(11 + 1.0 * (a - 2))}
+        h = KIDS_HEIGHT[a]
+        return m, False, "FITS CHILD HEIGHT", f"{h[0]}-{h[1]} cm", "Source: International size chart (kids)", \
+            f"≈ Approximate flat size for a usual {it['size']} piece. Exact size of this piece on WhatsApp."
+    t = norm_size(it["size"]) or EU_WOMEN.get(str(it["size"]).strip(), "") or "L"
+    name, ch = brand_chart(it["brand"]); src = ch if ch and t in ch else STD_CHART
+    lo, hi = src[t]; body = (lo + hi) / 2
+    ln, sh, sl = (GARMENT_WOMEN if it["gender"] == "Women" else GARMENT_MEN)[t]
+    if ease(it) == 6: ln += 1  # jackets and coats run a little longer
+    m = {"chest": HALF((body + ease(it)) / 2), "length": ln, "shoulder": sh, "sleeve": sl}
+    source = f"Source: Brand measurement ({name} size chart)" if src is not STD_CHART else "Source: International size chart"
+    return m, False, "FITS BODY CHEST", f'{lo:g}-{hi:g}"', source, \
+        f"≈ Approximate flat size for a usual size {t}. Exact size of this piece on WhatsApp."
+
+
+ANTON = Path(__file__).parent / "fonts" / "Anton-Regular.ttf"
+LOGO_W = Path(__file__).parent / "logo-white.png"
+def _a(px):
+    try: return ImageFont.truetype(str(ANTON), px)
+    except OSError: return _f("ExtraBold", px)
+
+
+def size_image(it, out, photo=None):
+    """Size card for every product (WAQAR, 13 Nov): photo, garment diagram, 4 measurement boxes, fit, tag size, and a
+    small source line (measured from the item / brand size chart / standard sizes). No tape data -> approximate (≈) values."""
+    W, H = 1080, 1350; G, BG, CR, MUT = (233, 196, 106), (18, 32, 27), (244, 234, 210), (201, 214, 209)
+    m, exact, flab, fval, source, note = card_data(it)
+    pre = "" if exact else "≈"
+    im = Image.new("RGB", (W, H), BG)
+    glow = Image.new("L", (W, H), 0); gd = ImageDraw.Draw(glow); gd.ellipse((-500, -650, 820, 520), fill=55); gd.ellipse((700, 950, 1500, 1750), fill=28)
+    glow = glow.filter(ImageFilter.GaussianBlur(160)); im.paste(Image.new("RGB", (W, H), G), (0, 0), glow)
+    d = ImageDraw.Draw(im)
+    try:
+        lg = Image.open(LOGO_W).convert("RGBA"); lg.thumbnail((240, 80)); im.paste(lg, (60, 48), lg)
+    except OSError: d.text((60, 60), CFG.get("storeName", ""), font=_f("ExtraBold", 36), fill="#ffffff")
+    badge = "SIZE & MEASUREMENTS"; bf = _f("Black", 22) if (FONT_DIR / "Inter-Black.otf").exists() else _f("ExtraBold", 22)
+    bw = d.textlength(badge, font=bf) + len(badge) * 3 + 40
+    d.rounded_rectangle((W - 60 - bw, 52, W - 60, 100), 24, outline=G, width=2)
+    x = W - 60 - bw + 20
+    for ch_ in badge: d.text((x, 76), ch_, font=bf, fill=G, anchor="lm"); x += d.textlength(ch_, font=bf) + 3
+    # title: brand in white, product name in gold, shrunk to fit one line
+    b, n = it["brand"].upper(), it["name"].upper()
+    if n.startswith(b): n = n[len(b):].strip()
+    px = 74
+    while px > 58 and d.textlength(f"{b} {n}", font=_a(px)) > 960: px -= 2
+    while n and d.textlength(f"{b} {n}", font=_a(px)) > 960: n = " ".join(n.split()[:-1])
+    while n.split() and n.split()[-1] in ("WITH", "AND", "&", "-", "IN", "OF", "FAUX"): n = " ".join(n.split()[:-1])
+    tf = _a(px); d.text((60, 175), b, font=tf, fill="#ffffff", anchor="lm")
+    d.text((60 + d.textlength(b + " ", font=tf), 175), n, font=tf, fill=G, anchor="lm")
+    # product photo
+    d.rounded_rectangle((60, 250, 460, 750), 22, fill="#ffffff")
+    if photo and Path(photo).exists():
+        p = Image.open(photo).convert("RGB"); p = ImageOps.contain(p, (400, 500), Image.LANCZOS)
+        mask = Image.new("L", (400, 500), 0); ImageDraw.Draw(mask).rounded_rectangle((0, 0, 399, 499), 22, fill=255)
+        tile = Image.new("RGB", (400, 500), "#ffffff"); tile.paste(p, ((400 - p.width) // 2, (500 - p.height) // 2)); im.paste(tile, (60, 250), mask)
+    # garment diagram (same outline as the website's how-we-measure picture), viewBox 600x560 at (480,240) scale 0.933
+    s, ox, oy = 560 / 600, 480, 240
+    P = lambda x, y: (ox + x * s, oy + y * s)
+    neck = [P(250 + 100 * t, 48 + 100 * t * (1 - t)) for t in [i / 12 for i in range(13)]]
+    pts = neck + [P(*q) for q in ((425, 68), (565, 328), (508, 358), (412, 200), (408, 522), (192, 522), (188, 200), (92, 358), (35, 328), (175, 68))]
+    ov = Image.new("RGBA", (W, H), (0, 0, 0, 0)); od = ImageDraw.Draw(ov); od.polygon(pts, fill=(255, 255, 255, 16)); im.paste(ov, (0, 0), ov)
+    d.line(pts + [pts[0]], fill=CR, width=3, joint="curve")
+    d.line([P(188, 200), P(192, 522)], fill=(80, 92, 86), width=2); d.line([P(412, 200), P(408, 522)], fill=(80, 92, 86), width=2)
+    import math
+    def arrow(a, b_):
+        (x1, y1), (x2, y2) = P(*a), P(*b_); d.line((x1, y1, x2, y2), fill=G, width=4)
+        ang = math.atan2(y2 - y1, x2 - x1)
+        for (x, y, k) in ((x1, y1, ang + math.pi), (x2, y2, ang)):
+            d.polygon([(x + 4 * math.cos(k), y + 4 * math.sin(k)), (x - 14 * math.cos(k) + 8 * math.sin(k), y - 14 * math.sin(k) - 8 * math.cos(k)), (x - 14 * math.cos(k) - 8 * math.sin(k), y - 14 * math.sin(k) + 8 * math.cos(k))], fill=G)
+    def pill(c, txt, rot=0):
+        pf = _f("ExtraBold", 26); tw = int(max(116, d.textlength(txt, font=pf) + 36))
+        pl = Image.new("RGBA", (tw, 44), (0, 0, 0, 0)); pd = ImageDraw.Draw(pl); pd.rounded_rectangle((0, 0, tw - 1, 43), 22, fill=G)
+        pd.text((tw / 2, 22), txt, font=pf, fill=BG, anchor="mm"); pl = pl.rotate(-rot, expand=True, resample=Image.BICUBIC)
+        x, y = P(*c); im.paste(pl, (int(x - pl.width / 2), int(y - pl.height / 2)), pl)
+    v = lambda k: f'{pre}{m[k]:g}"'
+    if m.get("shoulder"): arrow((180, 80), (420, 80)); pill((300, 118), v("shoulder"))
+    if m.get("chest"): arrow((194, 215), (406, 215)); pill((300, 252), v("chest"))
+    if m.get("length"): arrow((232, 64), (232, 516)); pill((232, 400), v("length"), -90)
+    if m.get("sleeve"): arrow((440, 78), (548, 320)); pill((494, 199), v("sleeve"), 66)
+    # measurement tiles
+    tiles = [(lab, m[k]) for k, lab in (("chest", "CHEST"), ("length", "LENGTH"), ("shoulder", "SHOULDER"), ("sleeve", "SLEEVE")) if m.get(k)]
+    gap = 16; tw = (960 - gap * (len(tiles) - 1)) / max(1, len(tiles))
+    for i, (lab, val) in enumerate(tiles):
+        x0 = 60 + i * (tw + gap); d.rounded_rectangle((x0, 800, x0 + tw, 970), 20, fill=(38, 51, 46), outline=(130, 118, 76), width=2)
+        d.text((x0 + tw / 2, 834), lab, font=_f("ExtraBold", 22), fill=G, anchor="mm")
+        d.text((x0 + tw / 2, 888), f'{pre}{val:g}"', font=_a(68), fill="#ffffff", anchor="mm")
+        d.text((x0 + tw / 2, 940), f"{pre}{round(val * 2.54)} cm", font=_f("SemiBold", 22), fill=MUT, anchor="mm")
+    # fit + tag size
+    d.rounded_rectangle((60, 1010, 585, 1135), 20, fill=G)
+    d.text((86, 1040), flab, font=_f("ExtraBold", 22), fill=BG, anchor="lm")
+    fv = str(fval); fpx = 58
+    while fpx > 30 and d.textlength(fv, font=_a(fpx)) > 480: fpx -= 2
+    d.text((86, 1090), fv, font=_a(fpx), fill=BG, anchor="lm")
+    d.rounded_rectangle((601, 1010, 1020, 1135), 20, outline=(150, 160, 155), width=2)
+    d.text((628, 1040), "TAG SIZE", font=_f("ExtraBold", 22), fill=G, anchor="lm")
+    d.text((628, 1090), str(it["size"] or "-"), font=_a(58), fill="#ffffff", anchor="lm")
+    # note + small source line
+    nf = _f("Medium", 23); words, lines = note.split(), [""]
+    for w_ in words:
+        t_ = (lines[-1] + " " + w_).strip()
+        if d.textlength(t_, font=nf) <= 960: lines[-1] = t_
+        else: lines.append(w_)
+    for i, l in enumerate(lines[:2]): d.text((60, 1168 + i * 30), l, font=nf, fill=MUT, anchor="lm")
+    d.text((60, 1170 + len(lines[:2]) * 30), f"{source}  ·  {it['sku']}", font=_f("SemiBold", 19), fill=(150, 165, 158), anchor="lm")
+    d.rectangle((0, 1250, W, H), fill=G)
+    d.text((60, 1300), CFG.get("domain", "abcthrift.store"), font=_f("ExtraBold", 38), fill=BG, anchor="lm")
+    wa = CFG.get("whatsapp", ""); wa = f"{wa[:4]} {wa[4:]}" if wa.isdigit() and len(wa) == 11 else wa
+    d.text((W - 60, 1300), f"WhatsApp {wa}", font=_f("ExtraBold", 30), fill=BG, anchor="rm")
     im.save(out, quality=88, optimize=True)
 
 
@@ -726,7 +808,7 @@ def product_page(it, all_items, n_imgs):
     related = [o for o in all_items if o["sku"] != sku and o["status"] != "Sold" and (o["category"] == it["category"] or o["gender"] == it["gender"])][:4]
     alt = it["brand"] + " " + it["name"]
     ai = it.get("ai_idx", set())
-    gimg = lambda i, s: f'<img src="{s}" alt="{esc(alt_text(it, i + 1))}{" (AI preview)" if i + 1 in ai else ""}" width="1200" height="1200"{" loading=lazy decoding=async" if i else " fetchpriority=high"}>'
+    gimg = lambda i, s: f'<img src="{s}" alt="{esc(f"{it['name']} size and measurements card" if "/sz/" in s else alt_text(it, i + 1))}{" (AI preview)" if i + 1 in ai else ""}" {'width="1080" height="1350"' if "/sz/" in s else 'width="1200" height="1200"'}{" loading=lazy decoding=async" if i else " fetchpriority=high"}>'
     gallery = "".join(f'<figure class="gi{" gai" if i + 1 in ai else ""}" data-i="{i}">{gimg(i, s)}{AI_BADGE if i + 1 in ai else ""}</figure>' for i, s in enumerate(imgs))
     thumbs = "".join(f'<button type="button" data-i="{i}" aria-label="Photo {i + 1}"{" aria-current=true" if not i else ""}><img src="{s.replace("/img/", "/img/t/")}" alt="" loading="lazy" width="80" height="80"></button>' for i, s in enumerate(imgs)) if len(imgs) > 1 else ""
     details = [("Brand", it["brand"]), ("Brand origin", it["origin"]), ("Category", it["category"]), ("For", it["gender"]), ("Size", it["size"]), ("Colour", it["color"])] + [(s["label"], s["value"]) for s in it["specs"] if s["label"].lower() not in ("brand", "size", "color", "colour", "gender", "category")]
@@ -1273,8 +1355,8 @@ def main(items_dir, assets_dir):
         if not n: it["images"] = []
     (tmp / "img" / "t" / "sz").mkdir(parents=True); (tmp / "img" / "sz").mkdir()
     for it in items:
-        size_image(it, tmp / "img" / "sz" / f"{it['sku']}.jpg")
-        sm = Image.open(tmp / "img" / "sz" / f"{it['sku']}.jpg"); sm.thumbnail((600, 600), Image.LANCZOS); sm.save(tmp / "img" / "t" / "sz" / f"{it['sku']}.jpg", quality=80)
+        size_image(it, tmp / "img" / "sz" / f"{it['sku']}.jpg", tmp / "img" / f"{it['sku']}-1.jpg")
+        sm = Image.open(tmp / "img" / "sz" / f"{it['sku']}.jpg"); sm.thumbnail((480, 600), Image.LANCZOS); sm.save(tmp / "img" / "t" / "sz" / f"{it['sku']}.jpg", quality=80)
     for f in (tmp / "img").glob("*.jpg"):  # 600px copies for cards, thumbnails and the home page (much lighter on mobile data)
         im = Image.open(f); im.thumbnail((600, 600), Image.LANCZOS); im.save(tmp / "img" / "t" / f.name, quality=80, optimize=True, progressive=True)
     day = datetime.now(timezone.utc) + timedelta(hours=5)
