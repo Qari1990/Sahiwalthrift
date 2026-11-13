@@ -1048,7 +1048,7 @@ def index_page(items):
 {f'<nav class="pills" aria-label="Categories">{pills}</nav>' if pills else ''}
 {deal}
 {brand_marquee()}
-<section class="trust"><div><b>Cash on delivery</b><span>Pay when the parcel arrives</span></div><div><b>{'Free delivery from ' + rs(dl['freeOver']) if dl.get('freeOver') else 'Nationwide delivery'}</b><span>{esc(dl.get('days', 'All over Pakistan'))}</span></div><div><b>Hand-checked</b><span>Washed, pressed, photographed for real</span></div><div><b>{CFG.get('returns', {}).get('days', 3)}-day exchange</b><span>If it doesn't match the page</span></div></section>
+<section class="trust"><div><b>Cash on delivery</b><span>Pay when the parcel arrives</span></div><div><b>{'Free delivery from ' + rs(dl['freeOver']) if dl.get('freeOver') else 'Nationwide delivery'}</b><span>{esc(dl.get('days', 'All over Pakistan'))}</span></div><div><b>Hand-checked</b><span>Washed, pressed, photographed for real</span></div><div><b>{CFG.get('returns', {}).get('days', 3)}-day exchange</b><span>If it doesn't match the page</span></div></section><section class="hiw"><style>.hiw{{margin:18px auto;max-width:1180px;padding:18px 16px;background:#15201d;color:#fff;border-radius:18px}}.hiw h2{{margin:0 0 10px;font-size:20px}}.hiw ol{{margin:0;padding:0;list-style:none;display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}}.hiw li{{background:rgba(255,255,255,.07);border-radius:12px;padding:10px 12px;font-size:14px;line-height:1.45;color:#d6e0dc}}.hiw li b{{display:block;color:#e9c46a;font-size:15px}}.hiw-cta{{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}}.hiw-cta a{{text-decoration:none;font-weight:800;font-size:14px;border-radius:999px;padding:10px 16px;background:#e9c46a;color:#15201d}}.hiw-cta a+a{{background:transparent;color:#fff;border:2px solid #e9c46a}}</style><h2>New to ABCThrift? Here is how it works</h2><ol><li><b>1. Original brands, pre-loved</b>H&amp;M, Bershka, OBEY, Sean John, Paragona and more, hand-picked one by one in Sahiwal.</li><li><b>2. One piece each, price on every item</b>The photos are of the exact piece you get. Ask on WhatsApp for a photo of the brand tag.</li><li><b>3. Order here or on WhatsApp</b>Pay cash when it arrives. Not happy? Return it within 7 days.</li></ol><div class="hiw-cta"><a href="catalogue.html">See the full price list</a><a href="https://www.facebook.com/abcthrift.store" target="_blank" rel="noopener">Follow us on Facebook</a></div></section>
 <section class="rv" id="rv" hidden><h2>Recently viewed</h2><div class="rv-row"></div></section>
 <section id="shop" class="shop"><div class="shop-hd"><h2 id="shop-h">Latest Arrivals <span class="muted" id="count">{len(live)} items</span></h2>
 <input id="q" type="search" placeholder="Search brand, item, colour, code" aria-label="Search"></div>
@@ -1408,7 +1408,7 @@ def main(items_dir, assets_dir):
     newest = lambda its: max((str(i["updated"])[:10] for i in its), default="")
     coll_rows = [(f"{slug}.html", newest([i for i in items if fn(i)]), []) for slug, _, _, _, _, fn in built]
     brand_rows = [(f"brands/{b}.html", newest([i for i in items if slugify(i["brand"]) == b]), []) for b in BRANDS] + ([("brands.html", newest(items), [])] if BRANDS else [])
-    (tmp / "sitemap.xml").write_text(sitemap(base, [("", day.strftime("%Y-%m-%d"), []), ("deals.html", day.strftime("%Y-%m-%d"), [])] + coll_rows + brand_rows + [(f"{s}.html", "", []) for s, _ in INFO if s not in NOINDEX] +
+    (tmp / "sitemap.xml").write_text(sitemap(base, [("", day.strftime("%Y-%m-%d"), []), ("deals.html", day.strftime("%Y-%m-%d"), []), ("catalogue.html", day.strftime("%Y-%m-%d"), [])] + coll_rows + brand_rows + [(f"{s}.html", "", []) for s, _ in INFO if s not in NOINDEX] +
         [(f"p/{i['sku']}.html", str(i["updated"])[:10], [f"{base}/img/{i['sku']}-{n}.jpg" for n in range(1, counts[i["sku"]] + 1)]) for i in items]))
     for f in ("logo.png", "og-image.png"):
         if (Path(__file__).parent / f).exists(): shutil.copy(Path(__file__).parent / f, tmp / f)
@@ -1416,6 +1416,7 @@ def main(items_dir, assets_dir):
     if CFG.get("domain"): (tmp / "CNAME").write_text(CFG["domain"] + "\n")
     (tmp / ".nojekyll").write_text("")
     shutil.rmtree(OUT, ignore_errors=True); tmp.rename(OUT)
+    import runpy; runpy.run_path(str(Path(__file__).parent / "catalogue.py"))["build"](OUT)  # fast price list for WhatsApp / ads
     print(f"{len(items)} items, {sum(counts.values())} photos -> {OUT}")
 
 
