@@ -216,18 +216,44 @@ def size_rank(s):
     return (3, 0, u)
 
 
-def fit_from_chest(pit):
-    """Same rule as the Landa Lister tool: garment pit-to-pit includes ~4" ease over body chest."""
+# Brand size charts: BODY chest in inches per tag size (same data as the Landa Lister tool, checked online 13 Nov 2026).
+BRAND_CHARTS = [
+    (r"\bobey\b", "OBEY", {"S": (35, 37), "M": (38, 40), "L": (41, 43), "XL": (44, 46), "XXL": (47, 49)}),
+    (r"american eagle|^ae$", "American Eagle", {"XS": (35, 36), "S": (37, 39), "M": (40, 42), "L": (43, 45), "XL": (46, 48), "XXL": (49, 51), "3XL": (52, 54)}),
+    (r"bershka", "Bershka", {"XS": (33, 35.5), "S": (35.5, 37.8), "M": (37.8, 40.2), "L": (40.2, 42.5), "XL": (42.5, 44.9)}),
+    (r"h\s*&\s*m|^hm$", "H&M", {"XS": (30.7, 33.9), "S": (33.9, 37), "M": (37, 40.2), "L": (40.2, 43.3), "XL": (43.3, 46.5), "XXL": (46.5, 49.6), "3XL": (49.6, 52.8)}),
+    (r"quechua|decathlon", "Decathlon", {"XS": (33.1, 34.3), "S": (34.6, 35.8), "M": (36.2, 37.4), "L": (37.8, 40.6), "XL": (40.9, 44.5), "XXL": (44.9, 48.4), "3XL": (48.8, 53.1)}),
+]
+STD_CHART = {"XS": (33, 36), "S": (36, 38.5), "M": (38.5, 41), "L": (41, 44), "XL": (44, 47), "XXL": (47, 50), "3XL": (50, 53)}
+KIDS_HEIGHT = {2: (92, 98), 3: (98, 104), 4: (104, 110), 5: (110, 116), 6: (116, 122), 7: (122, 128), 8: (128, 134), 9: (134, 140), 10: (140, 146), 11: (146, 152), 12: (152, 158), 13: (158, 164)}
+
+
+def norm_size(z):
+    u = str(z or "").upper().replace(" ", "").replace("2XL", "XXL").replace("XXXL", "3XL")
+    return u if u in ADULT else ""
+
+
+def brand_chart(brand):
+    for rx, name, ch in BRAND_CHARTS:
+        if re.search(rx, str(brand or "").strip(), re.I): return name, ch
+    return "", None
+
+
+def ease(it): return 6 if re.search(r"puffer|coat|jacket|leather|denim|parka|vest", it.get("category") or "", re.I) and not re.search(r"hood", it.get("category") or "", re.I) else 4
+
+
+def fit_from_chest(pit, it=None):
+    """Same rule as the Landa Lister tool: body chest = garment pit-to-pit x 2 minus ease, matched to the brand chart (else a standard chart)."""
     if not pit: return ""
-    c = pit * 2 - 4
-    return "XS" if c < 36 else "S" if c < 38.5 else "M" if c < 41 else "L" if c < 44 else "XL" if c < 47 else "XXL" if c < 50 else "3XL"
+    it = it or {}; body = pit * 2 - ease(it); ch = brand_chart(it.get("brand"))[1] or STD_CHART
+    return min(ch, key=lambda k: 0 if ch[k][0] <= body <= ch[k][1] else min(abs(body - ch[k][0]), abs(body - ch[k][1])))
 
 
 def fits_like(it):
     """'Fits like' size for adults: the seller's own call if given, else from the measured chest. One step away from the tag shows a range."""
     if it.get("fits"): return it["fits"]
     if it["gender"] == "Kids" or not it["meas"].get("chest"): return ""
-    f = fit_from_chest(it["meas"]["chest"]); t = str(it["size"]).upper().replace("2XL", "XXL")
+    f = fit_from_chest(it["meas"]["chest"], it); t = str(it["size"]).upper().replace("2XL", "XXL")
     if t in ADULT and f in ADULT and abs(ADULT.index(t) - ADULT.index(f)) == 1:
         a, b = sorted((t, f), key=ADULT.index); return f"{a}-{b}"
     return f
@@ -248,12 +274,25 @@ def measure_svg(m=None):
     return MEASURE_SVG.format(shoulder=lab("shoulder", "Shoulder"), chest=lab("chest", "Chest"), length=lab("length", "Length"), sleeve=lab("sleeve", "Sleeve"))
 
 
+def chart_note(it):
+    """No tape measurements yet: tell the shopper what the tag size normally fits, from the brand's chart or a standard chart."""
+    t = norm_size(it["size"])
+    if it["gender"] == "Kids" or not t:
+        m = re.match(r"(\d+)", str(it["size"])); h = KIDS_HEIGHT.get(int(m.group(1))) if m and "Y" in str(it["size"]).upper() else None
+        return f'<p class="chartnote">Kids size {esc(it["size"])} usually fits a child about {h[0]}–{h[1]} cm tall (standard EU kids sizing).</p>' if h else ""
+    name, ch = brand_chart(it["brand"]); lo, hi = (ch or STD_CHART).get(t, (0, 0))
+    if not lo: return ""
+    cm = f"{round(lo * 2.54)}–{round(hi * 2.54)} cm"
+    src = f"{esc(name)} size chart" if ch else "Standard size chart"
+    return f'<p class="chartnote"><b>{src}:</b> size {t} fits a body chest of about {lo:g}–{hi:g}″ ({cm}).</p>'
+
+
 def size_block(it):
     m = it["meas"]; f = fits_like(it)
     rows = "".join(f'<tr><th>{esc(MEAS_LABEL[k])}</th><td><b>{inch(v)}</b> <span class="muted">{round(v * 2.54)} cm</span></td></tr>' for k, v in m.items())
     top = f'<div class="szrow"><div><small>Tag size</small><b>{esc(it["size"] or "-")}</b></div>{f"<div class=fit><small>Fits like</small><b>{esc(f)}</b></div>" if f else ""}</div>'
     if not m:
-        return f'{top}<p>Measurements for this piece are on request. Send the item code {esc(it["sku"])} on WhatsApp and we will measure it for you. <a href="../size-guide.html">Size guide</a></p>'
+        return f'{top}{chart_note(it)}<p>This piece has not been hand-measured yet. Send the item code {esc(it["sku"])} on WhatsApp and we will measure it for you. <a href="../size-guide.html">Size guide</a></p>'
     full = f' Chest all round is about {inch(round(m["chest"] * 2))}.' if m.get("chest") else ""
     show = {k: m[k] for k in ("chest", "length", "shoulder", "sleeve") if m.get(k)}
     pic = f'<figure class="mfig">{measure_svg(show)}<figcaption>How we measure: the piece is laid flat and measured in inches.</figcaption></figure>' if show else ""
@@ -261,11 +300,26 @@ def size_block(it):
 <p>Measured by hand, laid flat.{full} Lay a top that fits you well flat and compare. <a href="../size-guide.html">Size guide</a>. Still unsure? Ask on WhatsApp.</p>{pic}"""
 
 
+OVERRIDES = json.loads((Path(__file__).parent / "size_overrides.json").read_text()) if (Path(__file__).parent / "size_overrides.json").exists() else {}
+
+
+def swap_size(v, old, new):
+    """Replace 'Size L' style mentions in listing text when the size is corrected (mirror of the tool's swapSize)."""
+    if isinstance(v, str): return re.sub(rf"(\bsize:?\s*\*?){re.escape(old)}(?![\w-])", rf"\g<1>{new}", v, flags=re.I)
+    if isinstance(v, list): return [({**x, "value": new if x.get("value") == old else swap_size(x.get("value"), old, new)} if isinstance(x, dict) and re.match(r"(?i)^size", x.get("label", "")) else swap_size(x, old, new)) for x in v]
+    if isinstance(v, dict): return {k: swap_size(x, old, new) for k, x in v.items()}
+    return v
+
+
 def load_items(items_dir):
     items = []
     for f in sorted(Path(items_dir).glob("*.json")):
         d = json.loads(f.read_text()); d = d.get("data", d)
         if d.get("status") not in LIVE: continue
+        o = OVERRIDES.get(d.get("sku"), {})
+        if o:
+            if o.get("size") and o["size"] != d.get("size"): d = {**d, "copy": swap_size(d.get("copy") or {}, d.get("size") or "", o["size"])}
+            d = {**d, **{k: v for k, v in o.items() if k in ("size", "fitsLike")}, "meas": {**(d.get("meas") or {}), **o.get("meas", {})}}
         c = d.get("copy") or {}
         brand = (d.get("brand") or "").strip() or CFG["houseLabel"]
         if brand.islower(): brand = brand.title()
