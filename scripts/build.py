@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 ROOT = Path(__file__).resolve().parent.parent
 CFG = json.loads((ROOT / "site.json").read_text())
@@ -285,6 +285,69 @@ def chart_note(it):
     cm = f"{round(lo * 2.54)}–{round(hi * 2.54)} cm"
     src = f"{esc(name)} size chart" if ch else "Standard size chart"
     return f'<p class="chartnote"><b>{src}:</b> size {t} fits a body chest of about {lo:g}–{hi:g}″ ({cm}).</p>'
+
+
+FONT_DIR = Path("/usr/share/fonts/opentype/inter")
+def _f(w, px):
+    for name in (f"Inter-{w}.otf", "Inter-Bold.otf"):
+        try: return ImageFont.truetype(str(FONT_DIR / name), px)
+        except OSError: pass
+    return ImageFont.load_default()
+
+
+def size_image(it, out):
+    """One simple size-guide picture per product (WAQAR, 13 Nov): exact tape numbers when we have them,
+    otherwise the brand's (or a standard) S-XXL chest chart with this item's size highlighted. Kids: age vs height."""
+    W = 1200; BG, INK, GOLD, MUT, ROW = "#f6f3ec", "#1d2b26", "#b8860b", "#5d6b66", "#ebe4d3"
+    im = Image.new("RGB", (W, W), BG); d = ImageDraw.Draw(im)
+    def ctext(y, t, f, fill=INK): d.text((W / 2, y), t, font=f, fill=fill, anchor="mm")
+    ctext(90, "SIZE GUIDE", _f("Bold", 40), GOLD)
+    ctext(170, f"Size {it['size']}" if it["size"] else "Size", _f("ExtraBold", 92))
+    ctext(250, f"{it['brand']} · {it['sku']}", _f("Medium", 34), MUT)
+    m = {k: v for k, v in it["meas"].items() if k in ("chest", "length", "shoulder", "sleeve") and v}
+    t = norm_size(it["size"])
+    def table(head, rows, hi, y0, note):
+        cols = len(head); x0, x1 = 120, W - 120; cw = (x1 - x0) / cols; rh = min(96, int(560 / max(1, len(rows) + 1)))
+        d.rounded_rectangle((x0, y0, x1, y0 + rh), 18, fill=INK)
+        for c, h in enumerate(head): d.text((x0 + cw * c + cw / 2, y0 + rh / 2), h, font=_f("Bold", 34), fill="#ffffff", anchor="mm")
+        for r, row in enumerate(rows):
+            y = y0 + rh * (r + 1); on = r == hi
+            if on: d.rounded_rectangle((x0, y + 6, x1, y + rh - 6), 18, fill=GOLD)
+            elif r % 2 == 0: d.rectangle((x0, y + 6, x1, y + rh - 6), fill=ROW)
+            for c, v in enumerate(row): d.text((x0 + cw * c + cw / 2, y + rh / 2), v, font=_f("ExtraBold" if on else "SemiBold", 42 if c == 0 else 38), fill="#ffffff" if on else INK, anchor="mm")
+        yb = y0 + rh * (len(rows) + 1) + 40
+        for i, line in enumerate(note): ctext(yb + i * 46, line, _f("Medium", 32), MUT)
+    if m:
+        rows = [(lab, f'{v:g}"', f"{round(v * 2.54)} cm") for k, lab in (("chest", "Chest (armpit to armpit)"), ("length", "Length (shoulder to hem)"), ("shoulder", "Shoulder (seam to seam)"), ("sleeve", "Sleeve (shoulder to cuff)")) if (v := m.get(k))]
+        f = fits_like(it)
+        d.rounded_rectangle((120, 320, W - 120, 420), 22, fill=GOLD)
+        ctext(370, "Measured by hand, laid flat" + (f"  ·  Fits like {f}" if f else ""), _f("Bold", 38), "#ffffff")
+        x0, x1 = 120, W - 120; rh = 110; y0 = 470
+        for r, (lab, a, b) in enumerate(rows):
+            y = y0 + r * rh
+            if r % 2 == 0: d.rounded_rectangle((x0, y, x1, y + rh - 10), 16, fill=ROW)
+            d.text((x0 + 30, y + rh / 2 - 5), lab, font=_f("SemiBold", 36), fill=INK, anchor="lm")
+            d.text((x1 - 210, y + rh / 2 - 5), a, font=_f("ExtraBold", 48), fill=INK, anchor="rm")
+            d.text((x1 - 30, y + rh / 2 - 5), b, font=_f("Medium", 34), fill=MUT, anchor="rm")
+        ctext(y0 + len(rows) * rh + 50, "Lay a top that fits you flat and compare.", _f("Medium", 32), MUT)
+    elif it["gender"] == "Kids" or not t:
+        ages = sorted(KIDS_HEIGHT); mm = re.match(r"(\d+)", str(it["size"])); a = int(mm.group(1)) if mm and "Y" in str(it["size"]).upper() else None
+        if a in KIDS_HEIGHT:
+            i = ages.index(a); pick = ages[max(0, i - 2): i + 3]
+            table(["Age", "Child height"], [(f"{x}-{x + 1}Y", f"{KIDS_HEIGHT[x][0]}-{KIDS_HEIGHT[x][1]} cm") for x in pick], pick.index(a), 320,
+                  ["Standard EU kids sizing.", "Want exact measurements? Ask us on WhatsApp."])
+        else:
+            rows = [(k, f'{lo:g}-{hi:g}"', f"{round(lo * 2.54)}-{round(hi * 2.54)} cm") for k, (lo, hi) in STD_CHART.items() if k in ("S", "M", "L", "XL", "XXL")]
+            table(["Size", "Chest (body)", "Chest (cm)"], rows, -1, 320, [f"Tag size {it['size']}. Standard size chart.", "Want exact measurements? Ask us on WhatsApp."])
+    else:
+        name, ch = brand_chart(it["brand"]); ch = ch or STD_CHART
+        keys = [k for k in ADULT if k in ch and (k in ("S", "M", "L", "XL", "XXL") or k == t)]
+        rows = [(k, f'{ch[k][0]:g}-{ch[k][1]:g}"', f"{round(ch[k][0] * 2.54)}-{round(ch[k][1] * 2.54)} cm") for k in keys]
+        table(["Size", "Chest (body)", "Chest (cm)"], rows, keys.index(t) if t in keys else -1, 320,
+              [f"{name} size chart." if name else "Standard size chart.", "Fits a person with this chest size.", "Want exact measurements? Ask us on WhatsApp."])
+    d.rectangle((0, W - 90, W, W), fill=INK)
+    ctext(W - 45, f"{CFG.get('domain', '')}  ·  WhatsApp {CFG.get('whatsapp', '')}", _f("SemiBold", 32), "#ffffff")
+    im.save(out, quality=88, optimize=True)
 
 
 def size_block(it):
@@ -659,7 +722,7 @@ def return_ld():
 
 def product_page(it, all_items, n_imgs):
     sku = it["sku"]; sold = it["status"] == "Sold"; deal = DEAL.get("sku") == sku and not sold
-    imgs = [f"../img/{sku}-{i}.jpg" for i in range(1, n_imgs + 1)]
+    imgs = [f"../img/{sku}-{i}.jpg" for i in range(1, n_imgs + 1)] + [f"../img/sz/{sku}.jpg"]
     related = [o for o in all_items if o["sku"] != sku and o["status"] != "Sold" and (o["category"] == it["category"] or o["gender"] == it["gender"])][:4]
     alt = it["brand"] + " " + it["name"]
     ai = it.get("ai_idx", set())
@@ -692,14 +755,14 @@ def product_page(it, all_items, n_imgs):
 {'<p class="soldmsg">This item has been sold. See similar items below or ask us on WhatsApp.</p>' if sold else f'<div class="cta">{buy}<button type="button" class="addbag" data-add="{bag_data(it)}">Add to bag</button></div>{ask}' + offer_box(it)}
 <ul class="perks"><li><b>Cash on delivery</b><span>Pay when the parcel arrives</span></li><li><b>Delivery</b><span>{esc(delivery_line())}</span></li><li><b>Easy exchange</b><span><a href="../returns.html">{CFG.get('returns', {}).get('days', 3)}-day exchange</a> if it doesn't match</span></li><li><b>Bundle &amp; save</b><span>{esc(bundle_line())}</span></li></ul>
 <section class="pdesc"><h2>About this piece</h2>{f'<p class="lead">{esc(it["desc"])}</p>' if it['desc'] else ''}<p class="muted">{esc(seo_blurb(it))}</p>{f'<h3>Highlights</h3><ul class="hl">{hl}</ul>' if hl else ''}{f'<p class="muted">{esc(it["fix"])}</p>' if it['fix'] else ''}</section>
-<details open class="szfit"><summary>Size &amp; measurements</summary>{size_block(it)}</details>
+<p class="szline">Size {esc(it["size"] or "-")}{f' · fits like {esc(fits_like(it))}' if fits_like(it) and fits_like(it) != it["size"] else ""} · <a href="#gal" data-szimg>see the size guide photo</a></p>
 <details><summary>Details</summary><dl>{''.join(f'<dt>{esc(k)}</dt><dd>{esc(v)}</dd>' for k, v in details)}<dt>Item code</dt><dd>{esc(sku)}</dd></dl></details>
 <details><summary>Delivery &amp; payment</summary><p>{esc(delivery_line())} Cash on delivery: pay when the parcel arrives. <a href="../shipping.html">More</a></p></details>
 <details><summary>How to order</summary><p>1. Tap "Buy now", or "Add to bag" for several items and check out together.<br>2. Enter your name, phone, city and address.<br>3. Place the order on the site or on WhatsApp; we confirm it.<br>4. Pay when the parcel arrives (COD).</p></details>
 <button class="share" type="button" data-share>Share this item</button>{f'<nav class="pills more" aria-label="More like this">{more}</nav>' if more else ''}</div></section>
 {f'<section class="rel"><h2>You may also like</h2><div class="grid">{"".join(card(o, "../") for o in related)}</div></section>' if related else ''}
 {'' if sold else f'<div class="sticky"><div>{price_html(it, "sp")}<span>{esc(it["brand"])}{" · " + esc(it["size"]) if it["size"] else ""}</span></div><button type="button" class="buy" data-buy="{bag_data(it)}">Buy now</button></div>'}"""
-    js = offer_js() + """<script>(function(){var g=document.getElementById('gal'),t=document.querySelectorAll('.gal-th button');t.forEach(function(b){b.onclick=function(){g.scrollTo({left:g.clientWidth*+b.dataset.i,behavior:'smooth'})}});
+    js = offer_js() + """<script>(function(){var z=document.querySelector('[data-szimg]'),gg=document.getElementById('gal');if(z&&gg)z.onclick=function(e){e.preventDefault();gg.scrollIntoView({behavior:'smooth',block:'center'});gg.scrollTo({left:gg.scrollWidth,behavior:'smooth'})}})()</script><script>(function(){var g=document.getElementById('gal'),t=document.querySelectorAll('.gal-th button');t.forEach(function(b){b.onclick=function(){g.scrollTo({left:g.clientWidth*+b.dataset.i,behavior:'smooth'})}});
 g&&g.addEventListener('scroll',function(){var i=Math.round(g.scrollLeft/g.clientWidth);t.forEach(function(b){b.setAttribute('aria-current',+b.dataset.i===i)})},{passive:true});
 var s=document.querySelector('[data-share]');s&&(s.onclick=function(){var d={title:document.title,url:location.href};if(navigator.share)navigator.share(d).catch(function(){});else navigator.clipboard.writeText(location.href).then(function(){s.textContent='Link copied'})})})()</script>"""
     if not sold: js += "<script>TP.seen(%s)</script>" % json.dumps({"sku": sku, "b": it["brand"], "n": it["name"], "p": it["price"], "i": f"img/{sku}-1.jpg" if n_imgs else ""})
@@ -1208,7 +1271,10 @@ def main(items_dir, assets_dir):
         counts[it["sku"]] = n; it["n_imgs"] = n
         if issues and it["status"] != "Sold": report[it["sku"]] = issues
         if not n: it["images"] = []
-    (tmp / "img" / "t").mkdir()
+    (tmp / "img" / "t" / "sz").mkdir(parents=True); (tmp / "img" / "sz").mkdir()
+    for it in items:
+        size_image(it, tmp / "img" / "sz" / f"{it['sku']}.jpg")
+        sm = Image.open(tmp / "img" / "sz" / f"{it['sku']}.jpg"); sm.thumbnail((600, 600), Image.LANCZOS); sm.save(tmp / "img" / "t" / "sz" / f"{it['sku']}.jpg", quality=80)
     for f in (tmp / "img").glob("*.jpg"):  # 600px copies for cards, thumbnails and the home page (much lighter on mobile data)
         im = Image.open(f); im.thumbnail((600, 600), Image.LANCZOS); im.save(tmp / "img" / "t" / f.name, quality=80, optimize=True, progressive=True)
     day = datetime.now(timezone.utc) + timedelta(hours=5)
