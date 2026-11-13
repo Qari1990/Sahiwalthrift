@@ -262,3 +262,7 @@ body.camp-live .camphero.camp{display:grid!important}body.camp-live .ocard.camp{
 /* modern touches */
 .card{border-radius:20px}.card:hover{transform:translateY(-4px);box-shadow:0 16px 34px rgba(21,32,29,.14)}.ci img{transition:opacity .35s,transform .5s}.card:hover .ci img:first-child{transform:scale(1.04)}
 .shop-hd h2,.how h2,.faqs h2,.conds h2,.rv h2{letter-spacing:-.03em}
+.szfit .szrow{display:flex;gap:10px;margin:10px 0}.szrow div{flex:1;border:1px solid var(--line);border-radius:12px;padding:8px 12px}.szrow .fit{background:#fbf3dc;border-color:#e9c46a}.szrow small{display:block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5d6965}.szrow b{font-size:22px}
+.mtab{width:100%;border-collapse:collapse;margin:6px 0 8px}.mtab th,.mtab td{padding:8px 4px;border-bottom:1px solid var(--line);text-align:left;font-size:14.5px}.mtab th{font-weight:500;color:#2c3532}.mtab td{text-align:right;white-space:nowrap}
+.mfig{margin:10px 0 0;text-align:center}.mfig .msvg{width:100%;max-width:340px;height:auto}.mfig figcaption{font-size:12.5px;color:#5d6965}
+.szchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0 14px}.szchips span{font-weight:700;font-size:14px;margin-right:4px}.szchips button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 13px;font:inherit;font-size:14px;cursor:pointer}.szchips button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
