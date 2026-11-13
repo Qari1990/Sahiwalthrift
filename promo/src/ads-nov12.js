@@ -78,6 +78,29 @@ P['114-car-6-order']=[1080,1080,`<div class="a glow" style="inset:0"></div><img 
 ${trust(50,430,40,['Pick your piece on abcthrift.store','Place order or WhatsApp us','Pay cash when it arrives','Not happy? 7-day returns'])}
 <div class="a" style="left:50px;top:830px;font-size:30px;font-weight:700;color:#f4ead2">Free delivery on Rs 1,999+ · Sahiwal 1-2 days</div>
 <div class="a" style="left:0;top:930px;width:1080px;height:150px;background:${G};color:${BG};display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:48px;font-weight:900">abcthrift.store</span><span style="font-size:30px;font-weight:900">WhatsApp 0311 4139007</span></div>`];
+
+const MENU=[['ST-PUF-0042','Bershka','Bomber · L',2899],['ST-PUF-0047','Paragona','Puffer · L',1999],['ST-PUF-0044','H&amp;M','Puffer · L',1999],
+['ST-COA-0046','MIPHA','Women parka · XL',1199],['ST-PUF-0041','Giordano','Puffer vest · L',999],['ST-SWE-0050','Bershka','Half-zip · L',1599],
+['ST-PUF-0053','AEO','Hoodie · L',799],['ST-SWE-0039','OBEY','Half-zip · L',699],['ST-SWE-0058','C&amp;A','Kids · 9-10Y',499],
+['ST-SWE-0017','Sean John','Quarter-zip · L',699],['ST-KID-0056','Northville','Kids jacket · 5-6Y',699],['ST-COA-0043','jodi','Women coat · L',1199]];
+const mcard=([s,b,d,p],l,t,w,h)=>`<div class="card a" style="left:${l}px;top:${t}px;width:${w}px;height:${h}px;background:#fff"><img src="${im(s)}" style="height:${h-112}px"><div style="position:absolute;left:0;right:0;bottom:0;height:112px;background:#fff;color:${BG};padding:10px 14px"><div style="font-weight:900;font-size:22px;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b}</div><div style="font-size:18px;font-weight:600;color:#5b625f">${d}</div><div style="font-size:30px;font-weight:900;color:#c0392b;margin-top:2px">${rs(p)}</div></div></div>`;
+const steps=(l,t,w,fs)=>`<div class="a" style="left:${l}px;top:${t}px;width:${w}px;display:flex;gap:12px">${[['1','Pick a piece','price & size on every item'],['2','Order on WhatsApp','or on abcthrift.store'],['3','Pay on delivery','7-day returns']].map(([n,a,b])=>`<div style="flex:1;background:rgba(255,255,255,.08);border-radius:16px;padding:12px 14px"><div style="display:flex;gap:10px;align-items:center"><span style="width:38px;height:38px;border-radius:50%;background:${G};color:${BG};font-weight:900;font-size:22px;display:flex;align-items:center;justify-content:center;flex:none">${n}</span><b style="font-size:${fs}px">${a}</b></div><div style="font-size:${fs-6}px;color:#d6e0dc;margin-top:6px">${b}</div></div>`).join('')}</div>`;
+P['115-ad-feed-price-menu']=[1080,1350,`<div class="a glow" style="inset:0"></div>
+<img class="a" src="${LOGOW}" style="left:50px;top:40px;width:220px">
+<div class="a" style="right:50px;top:44px;background:${G};color:${BG};font-weight:900;font-size:24px;padding:10px 18px;border-radius:999px">Cash on Delivery</div>
+<div class="a an" style="left:50px;top:110px;font-size:92px">EVERY PIECE. <span style="color:${G}">EVERY PRICE.</span></div>
+<div class="a" style="left:52px;top:212px;font-size:28px;font-weight:700;color:#f4ead2">Pre-loved original brands · only 1 of each · no hidden prices</div>
+${MENU.slice(0,9).map((m,i)=>mcard(m,50+(i%3)*330,272+Math.floor(i/3)*305,310,290)).join('')}
+${steps(50,1176,980,23)}
+<div class="a" style="left:0;top:1300px;width:1080px;height:50px;background:${G};color:${BG};display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900">Full price list: abcthrift.store/catalogue.html · WhatsApp 0311 4139007</div>`];
+P['116-ad-story-price-menu']=[1080,1920,`<div class="a glow" style="inset:0"></div>
+<img class="a" src="${LOGOW}" style="left:390px;top:130px;width:300px">
+<div class="a an" style="left:0;width:1080px;text-align:center;top:230px;font-size:104px">EVERY PIECE.<br><span style="color:${G}">EVERY PRICE.</span></div>
+<div class="a" style="left:0;width:1080px;text-align:center;top:450px;font-size:32px;font-weight:700;color:#f4ead2">Original brands · 1 of each · Cash on Delivery</div>
+${MENU.map((m,i)=>mcard(m,50+(i%3)*330,520+Math.floor(i/3)*292,310,280)).join('')}
+${steps(50,1700,980,24)}
+${foot(1810,1080)}`];
+
 (async()=>{const b=await chromium.launch();const pg=await b.newPage({deviceScaleFactor:1});
 for(const [k,[w,h,body]] of Object.entries(P)){if(process.argv[2]&&!k.startsWith(process.argv[2]))continue;await pg.setViewportSize({width:w,height:h});
 fs.writeFileSync(D+'/page.html',`<html><head>${CSS}</head><body style="width:${w}px;height:${h}px;position:relative;overflow:hidden">${body}</body></html>`);await pg.goto('file://'+D+'/page.html',{waitUntil:'networkidle'});
