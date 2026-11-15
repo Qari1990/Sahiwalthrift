@@ -101,6 +101,17 @@ var rv=$('rv');if(rv){var a=L.get('rv',[]);if(a.length){rv.hidden=false;rv.query
 var sq=$('q'),sqT,sqLast='';sq&&sq.addEventListener('input',function(){clearTimeout(sqT);sqT=setTimeout(function(){var v=sq.value.trim().toLowerCase();if(v.length>1&&v!==sqLast){sqLast=v;px('Search',{search_string:v})}},1500)});
 document.addEventListener('submit',function(e){if(e.target.id==='o-form'){var a=e.target.querySelector('[name=amount]');px('Lead',{content_category:'offer',value:+(a&&a.value)||0})}},true);
 document.addEventListener('click',function(e){var a=e.target.closest('a[href*="wa.me/"]');if(a)px('Contact',{content_category:'whatsapp'})},true);
+// live stock (no rebuild needed): an item marked sold in the sheet (one tap from the order email or the Landa Lister tool), or in an open website order, shows as sold / reserved on every page within a few minutes
+(function(){if(!T.api)return;var K='tp-live',c=null;try{c=JSON.parse(sessionStorage.getItem(K)||'null')}catch(e){}
+ function gone(s){return s&&(s.state==='sold'||s.state==='ordered')}
+ function apply(m){var sf=$('sold');all('.card[data-sku]').forEach(function(el){var s=m[el.dataset.sku];if(!gone(s)||el.classList.contains('is-sold'))return;el.classList.add('is-sold');var ci=el.querySelector('.ci');if(ci){[].forEach.call(ci.querySelectorAll('.b-new,.b-camp,.b-deal,.b-offer'),function(b){b.remove()});var b=document.createElement('span');b.className='b-sold';b.textContent=s.state==='sold'?'Sold out':'Reserved';ci.appendChild(b)}var a=el.querySelector('.cadd');a&&a.remove();if(sf&&!sf.checked)el.hidden=true});
+  var bt=document.querySelector('.cta [data-buy]'),sku='';try{sku=bt&&JSON.parse(bt.dataset.buy).sku}catch(e){}
+  if(sku&&gone(m[sku])){var cta=bt.closest('.cta'),p=document.createElement('p');p.className='soldmsg';p.textContent=m[sku].state==='sold'?'This item has been sold. See similar items below or ask us on WhatsApp.':'This item is reserved for another order right now. Ask us on WhatsApp and we will tell you if it comes back.';cta.parentNode.insertBefore(p,cta);cta.remove();var o=document.querySelector('.offer');o&&o.remove()}
+  var nb=bag.filter(function(x){return !gone(m[x.sku])});if(nb.length<bag.length){bag=nb;L.set('bag',bag);draw()}}
+ if(c&&Date.now()-c.t<120000)apply(c.m);else fetch(T.api+'?a=all').then(function(r){return r.json()}).then(function(m){if(m&&!m.error){try{sessionStorage.setItem(K,JSON.stringify({t:Date.now(),m:m}))}catch(e){}apply(m)}}).catch(function(){})})();
+// WhatsApp order message carries the item's size and page link, so the customer never has to explain which piece
+(function(){var bt=document.querySelector('.cta [data-buy]');if(!bt)return;var it;try{it=JSON.parse(bt.dataset.buy)}catch(e){return}var url=location.href.split('#')[0].split('?')[0];
+ all('a[href*="wa.me/"],[data-deal-href],[data-camp-href]').forEach(function(a){['href','data-deal-href','data-camp-href'].forEach(function(k){var h=a.getAttribute(k);if(!h||h.indexOf('wa.me/')<0||h.indexOf('text=')<0)return;var u=h.split('text='),t=decodeURIComponent(u[1]);if(t.indexOf(it.sku)<0||t.indexOf('/p/')>-1)return;t=t.replace('Is it available?','')+(it.s&&t.indexOf('size')<0?'\nSize: '+it.s:'')+'\nLink: '+url+'\nIs it available?';a.setAttribute(k,u[0]+'text='+encodeURIComponent(t))})})})();
 draw()})();
 /* Product photo zoom: hover zoom on desktop, full-screen viewer with pinch / double-tap zoom and swipe on mobile */
 (function(){

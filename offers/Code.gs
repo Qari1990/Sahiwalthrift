@@ -14,8 +14,16 @@
  *           To accept an offer straight away, set its status to "won".
  *   Items   one row per item that got an offer. "reserve" is your hidden lowest price
  *           (default 75% of the listed price); set "state" to "sold" when it sells elsewhere.
+ *
+ * Automations (all free, set up by `setup`):
+ *   - One-tap "mark sold": <exec URL>?a=mark&sku=ST-PUF-0001&to=sold&k=<owner key> (to=open undoes it).
+ *     The website hides the item within minutes, no rebuild. `setup` emails you the key and links.
+ *   - Website orders hold their items: an item in an open order shows "Reserved" on the site.
+ *   - Live product feed for Facebook / Instagram Shop and Google: <exec URL>?a=feed (sold items out of stock).
+ *   - Weekly report email (Monday 9 AM) and a 9 PM reminder when orders wait for confirmation.
+ *   - Orders "customerWa" column: one-tap WhatsApp message for the customer after each status change.
  */
-const VERSION = "2026-11-11d";
+const VERSION = "2026-11-15";
 const SITE = "https://abcthrift.store";
 const SITES = [SITE, "https://www.abcthrift.store", "https://qari1990.github.io/Sahiwalthrift", "http://abcthrift.store"]; // fallbacks if HTTPS is not ready yet
 const STORE = "ABCThrift";
@@ -31,7 +39,7 @@ const FREE_OVER = 1999;    // free delivery when goods (after discounts) reach t
 
 const OFFER_COLS = ["at", "sku", "name", "phone", "amount", "status", "counter", "counterAt", "note"];
 const ITEM_COLS = ["sku", "title", "price", "reserve", "firstAt", "endsAt", "state", "winnerPhone", "winnerAmount"];
-const ORDER_COLS = ["at", "no", "status", "name", "phone", "email", "city", "address", "note", "items", "subtotal", "discount", "delivery", "total", "tracking", "updated"];
+const ORDER_COLS = ["at", "no", "status", "name", "phone", "email", "city", "address", "note", "items", "subtotal", "discount", "delivery", "total", "tracking", "updated", "customerWa"];
 const SUB_COLS = ["at", "email", "phone"];
 
 function setup() {
@@ -45,6 +53,16 @@ function setup() {
   ScriptApp.newTrigger("closeExpired").timeBased().everyHours(1).create();
   ScriptApp.newTrigger("onSheetEdit").forSpreadsheet(ss).onEdit().create();
   ScriptApp.newTrigger("onOrderEdit").forSpreadsheet(ss).onEdit().create();
+  ScriptApp.newTrigger("weeklyReport").timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(9).inTimezone("Asia/Karachi").create();
+  ScriptApp.newTrigger("pendingReminder").timeBased().everyDays(1).atHour(21).inTimezone("Asia/Karachi").create();
+  const k = ownerKey(), base = ScriptApp.getService().getUrl() || "<aap ka /exec URL>";
+  notify(`${STORE}: automation on (owner key)`, `Setup ho gaya. Ye key kisi ko na dein.\n\nOwner key: ${k}\n\nItem sold karne ka one-tap link (SKU badal dein):\n${base}?a=mark&sku=ST-PUF-0001&to=sold&k=${k}\nWapas sale par: to=open\n\nLive product feed (Facebook / Instagram Shop, Google Merchant):\n${base}?a=feed\n\nWeekly report har Monday subah 9 baje aur pending orders ka reminder raat 9 baje email par aayega.`);
+  return "Owner key: " + k;
+}
+function ownerKey() {
+  const pr = PropertiesService.getScriptProperties(); let k = pr.getProperty("ownerKey");
+  if (!k) { k = Utilities.getUuid().replace(/-/g, "").slice(0, 12); pr.setProperty("ownerKey", k); }
+  return k;
 }
 
 /* ---------- web endpoints ---------- */
@@ -56,7 +74,9 @@ function handle(p) {
   try {
     lock.waitLock(10000);
     closeExpired();
-    const out = ({ ping: ping, state: () => state(p.sku), all: allStates, offer: () => makeOffer(p), mine: () => mine(p.sku, p.phone), accept: () => acceptCounter(p.sku, p.phone), order: () => placeOrder(p), track: () => track(p.no, p.phone), subscribe: () => subscribe(p) }[p.a] || (() => ({ error: "unknown action" })))();
+    const out = ({ ping: ping, state: () => state(p.sku), all: allStates, mark: () => mark(p), feed: liveFeed, offer: () => makeOffer(p), mine: () => mine(p.sku, p.phone), accept: () => acceptCounter(p.sku, p.phone), order: () => placeOrder(p), track: () => track(p.no, p.phone), subscribe: () => subscribe(p) }[p.a] || (() => ({ error: "unknown action" })))();
+    if (out && out._xml) return ContentService.createTextOutput(out._xml).setMimeType(ContentService.MimeType.XML);
+    if (out && out._html) return HtmlService.createHtmlOutput(out._html).setTitle(STORE).addMetaTag("viewport", "width=device-width, initial-scale=1");
     return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ error: String(err.message || err) })).setMimeType(ContentService.MimeType.JSON);
@@ -119,15 +139,54 @@ function state(sku) {
   const it = itemRow(sku, false);
   const live = offers().filter((o) => o.sku === sku && ["new", "countered", "won"].includes(o.status));
   const top = live.reduce((m, o) => Math.max(m, +o.amount || 0), 0);
-  const st = c.status === "Sold" || (it && it.state === "sold") ? "sold" : it && it.state === "won" ? "won" : "open";
+  const st = c.status === "Sold" || (it && it.state === "sold") ? "sold" : ordered()[sku] ? "ordered" : it && it.state === "won" ? "won" : "open";
   return { sku, price: c.price, minOffer: Math.ceil(c.price * MIN_PCT / 50) * 50, highest: top, count: live.length,
     endsAt: it && it.endsAt ? ms(it.endsAt) : 0, state: st, step: STEP, windowH: WINDOW_H, holdH: HOLD_H };
 }
 function allStates() {
   const out = {};
   offers().forEach((o) => { if (["new", "countered", "won"].includes(o.status)) { const s = out[o.sku] || (out[o.sku] = { highest: 0, count: 0 }); s.highest = Math.max(s.highest, +o.amount || 0); s.count++; } });
-  items().forEach((i) => { if (out[i.sku]) { out[i.sku].endsAt = ms(i.endsAt); out[i.sku].state = i.state; } });
+  items().forEach((i) => { if (out[i.sku] || i.state === "sold") { const s = out[i.sku] || (out[i.sku] = { highest: 0, count: 0 }); s.endsAt = ms(i.endsAt); s.state = i.state; } });
+  // items in an open website order show "Reserved" on the site until the order is cancelled
+  const od = ordered();
+  Object.keys(od).forEach((k) => { const s = out[k] || (out[k] = { highest: 0, count: 0 }); if (s.state !== "sold") s.state = /deliver|dispatch/i.test(od[k]) ? "sold" : "ordered"; });
   return out;
+}
+function ordered() {
+  const m = {};
+  orders().forEach((o) => { if (/cancel/i.test(o.status)) return; (String(o.items).match(/\[([A-Z0-9-]+)\]/g) || []).forEach((t) => (m[t.slice(1, -1)] = o.status || "New")); });
+  return m;
+}
+
+/* ---------- owner one-tap actions ---------- */
+const page = (title, msg, ok) => ({ _html: `<div style="font-family:Arial,sans-serif;max-width:460px;margin:40px auto;padding:24px;border-radius:16px;background:${ok ? "#e8f5ee" : "#fbeaea"};color:#15201d"><h2 style="margin:0 0 8px">${title}</h2><p style="font-size:16px;line-height:1.5">${msg}</p><p><a href="${SITE}" style="color:#1f8f4e">${SITE.replace("https://", "")}</a></p></div>` });
+function mark(p) {
+  if (!p.k || p.k !== ownerKey()) return page("Key galat hai", "Ye link sirf store owner ke liye hai. Setup wali email se sahi link use karein.", false);
+  const to = p.to === "open" ? "open" : "sold", cat = catalog();
+  const skus = String(p.sku || "").toUpperCase().split(/[\s,]+/).filter(Boolean), done = [], bad = [];
+  skus.forEach((sku) => {
+    if (!cat[sku]) { bad.push(sku); return; }
+    const it = itemRow(sku, true); it.state = to;
+    if (to === "open") { it.firstAt = ""; it.endsAt = ""; it.winnerPhone = ""; it.winnerAmount = ""; }
+    put("Items", ITEM_COLS, it); done.push(sku);
+  });
+  if (!done.length) return page("Item nahi mila", `${bad.join(", ") || "SKU"} website par nahi mila. SKU check karein (jaise ST-PUF-0001).`, false);
+  return page(to === "sold" ? "Sold ho gaya ✓" : "Wapas sale par ✓", `${done.join(", ")} ${to === "sold" ? "ab website par Sold out dikhe ga" : "ab website par dobara available hai"} (2-3 minute mein).${bad.length ? "<br>Nahi mile: " + bad.join(", ") : ""}<br><br>Tool mein bhi status ${to === "sold" ? "Sold" : "Listed"} kar dein taa ke agli website update mein bhi sahi rahe.`, true);
+}
+
+/* Live feed for Facebook / Instagram Shop and Google Merchant: the website feed.xml with sold / reserved items set to out of stock. */
+function liveFeed() {
+  const c = CacheService.getScriptCache(), hit = c.get("feed"); if (hit) return { _xml: hit };
+  let xml = "";
+  for (const s of SITES) { try { const r = UrlFetchApp.fetch(s + "/feed.xml?t=" + Date.now(), { muteHttpExceptions: true, followRedirects: true }); if (r.getResponseCode() === 200) { xml = r.getContentText(); break; } } catch (e) {} }
+  if (!xml) return { _xml: '<?xml version="1.0"?><error>feed not reachable</error>' };
+  const st = allStates(), cat = catalog();
+  xml = xml.replace(/<item>[\s\S]*?<\/item>/g, (b) => {
+    const m = b.match(/<g:id>([^<]+)<\/g:id>/), sku = m && m[1], s = st[sku];
+    return (s && (s.state === "sold" || s.state === "ordered")) || (cat[sku] && cat[sku].status === "Sold") ? b.replace(/<g:availability>[^<]*<\/g:availability>/, "<g:availability>out_of_stock</g:availability>") : b;
+  });
+  if (xml.length < 95000) c.put("feed", xml, 900);
+  return { _xml: xml };
 }
 
 /* ---------- actions ---------- */
@@ -284,10 +343,46 @@ function onOrderEdit(e) {
   const sh = e.range.getSheet(); if (sh.getName() !== "Orders" || e.range.getRow() < 2) return;
   const col = ORDER_COLS[e.range.getColumn() - 1]; if (col !== "status" && col !== "tracking") return;
   const o = orders().find((x) => x._row === e.range.getRow()); if (!o) return;
-  o.updated = new Date(); put("Orders", ORDER_COLS, o);
+  o.updated = new Date();
   const k = String(o.status).toLowerCase();
+  // most customers give no email: a ready WhatsApp message for them, one tap from the sheet
+  const waText = { confirmed: `Hi ${o.name}! Your ${STORE} order ${o.no} (${rs(o.total)}, cash on delivery) is confirmed. We will dispatch it within 24 hours.`,
+    dispatched: `Hi ${o.name}! Your ${STORE} order ${o.no} is on its way${o.tracking ? ". Tracking: " + o.tracking : ""}. Please keep ${rs(o.total)} ready for the rider. Track: ${SITE}/track.html?o=${encodeURIComponent(o.no)}`,
+    delivered: `Hi ${o.name}! Thank you for shopping with ${STORE}. We hope you love it! A photo of you wearing it would make our day. Any problem? Message us within 7 days. New drops: ${SITE}`,
+    cancelled: `Hi ${o.name}, your ${STORE} order ${o.no} has been cancelled. If this is a mistake, just reply here.` }[k];
+  if (col === "status" && waText) o.customerWa = waLink(o.phone, waText);
+  if (col === "tracking" && o.tracking) o.customerWa = waLink(o.phone, `Hi ${o.name}! Tracking number for your ${STORE} order ${o.no}: ${o.tracking}. Track: ${SITE}/track.html?o=${encodeURIComponent(o.no)}`);
+  put("Orders", ORDER_COLS, o);
   if (col === "status" && STATUS_TEXT[k]) mailCustomer(o, "Order " + o.status, STATUS_TEXT[k]);
   if (col === "tracking" && o.tracking) mailCustomer(o, "Tracking number", "Here is the tracking number for your parcel.");
 }
 
 function notify(subject, body) { try { MailApp.sendEmail(Session.getEffectiveUser().getEmail(), subject, body); } catch (e) {} }
+
+/* ---------- reports (time triggers, created by setup) ---------- */
+function weeklyReport() {
+  const now = Date.now(), wk = now - 7 * 864e5, os = orders(), week = os.filter((o) => ms(o.at) >= wk);
+  const live = week.filter((o) => !/cancel/i.test(o.status)), by = {};
+  week.forEach((o) => (by[o.status || "New"] = (by[o.status || "New"] || 0) + 1));
+  const cat = catalog(), st = allStates(), list = Object.keys(cat).map((k) => cat[k]);
+  const gone = (i) => i.status === "Sold" || (st[i.sku] && (st[i.sku].state === "sold" || st[i.sku].state === "ordered"));
+  const left = list.filter((i) => !gone(i)), soldN = list.length - left.length;
+  const offersN = offers().filter((o) => ms(o.at) >= wk).length, subsN = rows("Subscribers", SUB_COLS).filter((x) => ms(x.at) >= wk).length;
+  const waiting = os.filter((o) => /^new$/i.test(o.status || "New") && now - ms(o.at) > 24 * 3600e3);
+  const late = os.filter((o) => /dispatch/i.test(o.status) && now - ms(o.updated) > 6 * 864e5);
+  const top = left.sort((a, b) => b.price - a.price).slice(0, 5);
+  const body = [`${STORE} weekly report (pichle 7 din)`, "",
+    `Orders: ${live.length} (cancelled ${week.length - live.length})`, `Sale value: ${rs(live.reduce((t, o) => t + (+o.total || 0), 0))}`,
+    `Status: ${Object.keys(by).map((k) => k + " " + by[k]).join(", ") || "-"}`, `Offers aayi: ${offersN} · Newsletter sign-ups: ${subsN}`, "",
+    `Website stock: ${left.length} available, ${soldN} sold/reserved · stock value ${rs(left.reduce((t, i) => t + (+i.price || 0), 0))}`,
+    waiting.length ? `\nConfirm karna baqi (24h+): ${waiting.map((o) => o.no + " " + o.name + " " + waLink(o.phone)).join("\n")}` : "Koi order confirm ke liye pending nahi.",
+    late.length ? `\nDispatched 6+ din se, delivered nahi: ${late.map((o) => o.no + " " + (o.tracking || "")).join(", ")}` : "",
+    "", "Sab se mehnge unsold items (inhein post / ad mein lagayen):", ...top.map((i) => `- ${i.title} (${i.sku}) ${rs(i.price)} ${SITE}/p/${i.sku}.html`),
+    "", "Naye items website par chahiyen? Claude ko likhein: \"website update karo\"."].join("\n");
+  notify(`${STORE} weekly report: ${live.length} orders, ${rs(live.reduce((t, o) => t + (+o.total || 0), 0))}`, body);
+}
+function pendingReminder() {
+  const now = Date.now(), w = orders().filter((o) => /^new$/i.test(o.status || "New") && now - ms(o.at) > 6 * 3600e3);
+  if (!w.length) return;
+  notify(`${STORE}: ${w.length} order confirm karna baqi`, w.map((o) => `${o.no} · ${o.name} · ${o.city} · ${rs(o.total)}\nWhatsApp: ${waLink(o.phone, `Hi ${o.name}! ${STORE} here about your order ${o.no} (${rs(o.total)}). Please reply "Yes" to confirm and we will dispatch it.`)}`).join("\n\n") + "\n\nConfirm hone par Orders sheet mein status \"Confirmed\" kar dein.");
+}

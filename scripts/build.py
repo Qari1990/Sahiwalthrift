@@ -89,7 +89,9 @@ def wa_digits():
 
 
 def order_link(it=None, price=None, label="Deal of the Day"):
-    msg = (f"Hi! I'd like to order: {it['brand']} {it['name']} ({it['sku']}), {rs(price or it['price'])}{f' ({label})' if price else ''}. Is it available?"
+    # size + page link in the message, so the customer never has to explain which piece (site.js patches older pages the same way)
+    msg = (f"Hi! I'd like to order: {it['brand']} {it['name']} ({it['sku']}), {rs(price or it['price'])}{f' ({label})' if price else ''}."
+           + (f"\nSize: {it['size']}" if it.get('size') else "") + f"\nLink: {CFG['siteUrl'].rstrip('/')}/p/{it['sku']}.html\nIs it available?"
            if it else "Hi! I have a question about your store.")
     return f"https://wa.me/{wa_digits()}?text={urllib.parse.quote(msg)}"
 
