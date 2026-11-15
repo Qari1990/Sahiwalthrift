@@ -43,3 +43,16 @@ If the web app is down, the website still works: orders and offers open in Whats
 ## Newsletter
 
 Sign-ups from the footer form go to "Subscribers".
+
+## Automations (free, added 2026-11-15)
+
+After pasting the new `Code.gs`, run `setup` once more (it keeps your data, re-creates the triggers and emails you an owner key), then Deploy > Manage deployments > edit > New version.
+
+- **One-tap Sold**: `<exec URL>?a=mark&sku=ST-PUF-0001&to=sold&k=<owner key>` marks the item sold in "Items"; the website shows it as Sold out within a few minutes, no rebuild. `to=open` puts it back on sale. Several SKUs: `sku=ST-PUF-0001,ST-HOO-0002`. In Landa Lister, put the owner key in Presets once; "Sold ho gaya", Save with status Sold and the bulk status button then open this link for you.
+- **Orders hold items**: an item in a website order that is not cancelled shows "Reserved" on the site (dispatched / delivered orders show Sold out) and cannot be offered on or ordered again.
+- **Live product feed**: `<exec URL>?a=feed` is the site's `feed.xml` with sold and reserved items set to `out_of_stock`. Use it as the scheduled data feed in Meta Commerce Manager (Facebook / Instagram Shop) and Google Merchant Center.
+- **Customer WhatsApp messages**: when you change an order's status (Confirmed, Dispatched, Delivered, Cancelled) or add tracking, the "customerWa" column gets a one-tap WhatsApp link with the message ready. Tap it, then Send.
+- **Weekly report**: every Monday 9 AM (Pakistan time) an email with orders, sales, pending orders, stock left and the items to promote.
+- **Pending reminder**: 9 PM every day, only when an order has waited 6+ hours for confirmation, with one-tap WhatsApp links.
+
+Google's free limits (about 100 emails and 20,000 URL fetches a day) are far above what the store uses.
