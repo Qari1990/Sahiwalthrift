@@ -23,11 +23,11 @@
  *   - Weekly report email (Monday 9 AM) and a 9 PM reminder when orders wait for confirmation.
  *   - Orders "customerWa" column: one-tap WhatsApp message for the customer after each status change.
  */
-const VERSION = "2026-11-15";
+const VERSION = "2026-11-18";
 const SITE = "https://abcthrift.store";
 const SITES = [SITE, "https://www.abcthrift.store", "https://qari1990.github.io/Sahiwalthrift", "http://abcthrift.store"]; // fallbacks if HTTPS is not ready yet
 const STORE = "ABCThrift";
-const WHATSAPP = "923114139007";
+const WHATSAPP = "923224631990";
 const MIN_PCT = 0.6;       // offers below 60% of the price are refused
 const RESERVE_PCT = 0.75;  // a winning offer must reach this unless you change "reserve"
 const WINDOW_H = 24;       // bidding window, counted from the first offer

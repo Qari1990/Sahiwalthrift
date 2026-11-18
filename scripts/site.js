@@ -159,7 +159,7 @@ function up(e){var was=g;delete pts[e.pointerId];
 })();
 // ---------- Engagement: share, follow, WhatsApp new-arrivals list ----------
 (function(){
-var T=window.TP||{},R=T.root||'',FB=T.fb||'https://www.facebook.com/abcthrift.store',WA=T.wa||'923114139007';
+var T=window.TP||{},R=T.root||'',FB=T.fb||'https://www.facebook.com/abcthrift.store',WA=T.wa||'923224631990';
 function q(s,r){return (r||document).querySelector(s)}
 function get(k,d){try{var v=localStorage.getItem('tp-'+k);return v?JSON.parse(v):d}catch(e){return d}}
 function put(k,v){try{localStorage.setItem('tp-'+k,JSON.stringify(v))}catch(e){}}
