@@ -21,7 +21,7 @@ const HERO=[['ST-PUF-0042','Bershka',2899],['ST-PUF-0047','Paragona',1999],['ST-
 const TAGS=[['par','Paragona'],['rec','Recel'],['gio','Giordano'],['kla','Klaus Feuner']];
 const tagRow=(l,t,s,gap)=>TAGS.map(([n,b],i)=>`<div class="tag a" style="left:${l+i*(s+gap)}px;top:${t}px;width:${s}px;height:${s}px"><img src="${T(n)}"></div>`).join('');
 const trust=(l,t,fs,items)=>`<div class="a" style="left:${l}px;top:${t}px;display:flex;flex-direction:column;gap:${fs*.7}px;font-size:${fs}px">${items.map(x=>`<div class="tick"><i>✓</i>${x}</div>`).join('')}</div>`;
-const foot=(t,w)=>`<div class="a" style="left:0;top:${t}px;width:${w}px;height:110px;background:${G};color:${BG};display:flex;align-items:center;justify-content:space-between;padding:0 60px"><span style="font-size:40px;font-weight:900">abcthrift.store</span><span style="font-size:30px;font-weight:900">WhatsApp 0311 4139007</span></div>`;
+const foot=(t,w)=>`<div class="a" style="left:0;top:${t}px;width:${w}px;height:110px;background:${G};color:${BG};display:flex;align-items:center;justify-content:space-between;padding:0 60px"><span style="font-size:40px;font-weight:900">abcthrift.store</span><span style="font-size:30px;font-weight:900">WhatsApp 0322 4631990</span></div>`;
 const P={};
 // ---------- A1 hero feed 4:5 ----------
 P['111-ad-feed-real-brands']=[1080,1350,`<div class="a glow" style="inset:0"></div>
@@ -77,7 +77,7 @@ P['114-car-6-order']=[1080,1080,`<div class="a glow" style="inset:0"></div><img 
 <div class="a an" style="left:50px;top:160px;font-size:110px">ORDER IN<br><span style="color:${G}">2 MINUTES</span></div>
 ${trust(50,430,40,['Pick your piece on abcthrift.store','Place order or WhatsApp us','Pay cash when it arrives','Not happy? 7-day returns'])}
 <div class="a" style="left:50px;top:830px;font-size:30px;font-weight:700;color:#f4ead2">Free delivery on Rs 1,999+ · Sahiwal 1-2 days</div>
-<div class="a" style="left:0;top:930px;width:1080px;height:150px;background:${G};color:${BG};display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:48px;font-weight:900">abcthrift.store</span><span style="font-size:30px;font-weight:900">WhatsApp 0311 4139007</span></div>`];
+<div class="a" style="left:0;top:930px;width:1080px;height:150px;background:${G};color:${BG};display:flex;flex-direction:column;align-items:center;justify-content:center"><span style="font-size:48px;font-weight:900">abcthrift.store</span><span style="font-size:30px;font-weight:900">WhatsApp 0322 4631990</span></div>`];
 
 const MENU=[['ST-PUF-0042','Bershka','Bomber · L',2899],['ST-PUF-0047','Paragona','Puffer · L',1999],['ST-PUF-0044','H&amp;M','Puffer · L',1999],
 ['ST-COA-0046','MIPHA','Women parka · XL',1199],['ST-PUF-0041','Giordano','Puffer vest · L',999],['ST-SWE-0050','Bershka','Half-zip · L',1599],
@@ -92,7 +92,7 @@ P['115-ad-feed-price-menu']=[1080,1350,`<div class="a glow" style="inset:0"></di
 <div class="a" style="left:52px;top:212px;font-size:28px;font-weight:700;color:#f4ead2">Pre-loved original brands · only 1 of each · no hidden prices</div>
 ${MENU.slice(0,9).map((m,i)=>mcard(m,50+(i%3)*330,272+Math.floor(i/3)*305,310,290)).join('')}
 ${steps(50,1176,980,23)}
-<div class="a" style="left:0;top:1300px;width:1080px;height:50px;background:${G};color:${BG};display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900">Full price list: abcthrift.store/catalogue.html · WhatsApp 0311 4139007</div>`];
+<div class="a" style="left:0;top:1300px;width:1080px;height:50px;background:${G};color:${BG};display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900">Full price list: abcthrift.store/catalogue.html · WhatsApp 0322 4631990</div>`];
 P['116-ad-story-price-menu']=[1080,1920,`<div class="a glow" style="inset:0"></div>
 <img class="a" src="${LOGOW}" style="left:390px;top:130px;width:300px">
 <div class="a an" style="left:0;width:1080px;text-align:center;top:230px;font-size:104px">EVERY PIECE.<br><span style="color:${G}">EVERY PRICE.</span></div>
