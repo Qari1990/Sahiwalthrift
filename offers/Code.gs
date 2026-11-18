@@ -23,7 +23,7 @@
  *   - Weekly report email (Monday 9 AM) and a 9 PM reminder when orders wait for confirmation.
  *   - Orders "customerWa" column: one-tap WhatsApp message for the customer after each status change.
  */
-const VERSION = "2026-11-15";
+const VERSION = "2026-11-18";
 const SITE = "https://abcthrift.store";
 const SITES = [SITE, "https://www.abcthrift.store", "https://qari1990.github.io/Sahiwalthrift", "http://abcthrift.store"]; // fallbacks if HTTPS is not ready yet
 const STORE = "ABCThrift";
