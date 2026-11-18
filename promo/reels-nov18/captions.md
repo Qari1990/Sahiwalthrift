@@ -70,7 +70,7 @@ Sleeveless warmth for chilly mornings. Original brands, Rs 999 each.
 
 📲 WhatsApp a screenshot: 0322 4631990
 💵 Cash on Delivery all Pakistan
-🚚 FREE delivery on Rs 1,999+ (2 vests = free delivery!) · ↩️ 7-day returns
+🚚 FREE delivery on Rs 1,999+ (otherwise Rs 250) · ↩️ 7-day returns
 🛒 abcthrift.store
 
 #ABCThrift #PufferVest #Giordano #OriginalBrands #ThriftPakistan #PreLoved #Sahiwal #MensFashion #WinterWear
