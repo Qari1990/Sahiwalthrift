@@ -23,7 +23,7 @@
  *   - Weekly report email (Monday 9 AM) and a 9 PM reminder when orders wait for confirmation.
  *   - Orders "customerWa" column: one-tap WhatsApp message for the customer after each status change.
  */
-const VERSION = "2026-11-18";
+const VERSION = "2026-11-23";
 const SITE = "https://abcthrift.store";
 const SITES = [SITE, "https://www.abcthrift.store", "https://qari1990.github.io/Sahiwalthrift", "http://abcthrift.store"]; // fallbacks if HTTPS is not ready yet
 const STORE = "ABCThrift";
@@ -36,6 +36,8 @@ const COUNTER_H = 24;      // a counter offer is valid this long
 const STEP = 50;           // a new offer must beat the highest by at least this much
 const DELIVERY_FEE = 250;  // must match site.json "delivery"
 const FREE_OVER = 1999;    // free delivery when goods (after discounts) reach this
+// Website Grand Launch (same as site.json "launch"): 1 jacket of Rs 1,999+ = 1 kids sweatshirt free, 2+ = 1 men's sweatshirt (Rs 599-699) free, free delivery
+const LAUNCH = { name: "Website Grand Launch", start: "2026-11-23T00:00:00+05:00", end: "2026-11-29T23:59:59+05:00", min: 1999, kidsMax: 499, menMax: 699 };
 
 const OFFER_COLS = ["at", "sku", "name", "phone", "amount", "status", "counter", "counterAt", "note"];
 const ITEM_COLS = ["sku", "title", "price", "reserve", "firstAt", "endsAt", "state", "winnerPhone", "winnerAmount"];
@@ -293,14 +295,20 @@ function placeOrder(p) {
   if (gone.length) return { error: "Sorry, already sold: " + gone.map((i) => i.sku).join(", ") + ". We removed it from your bag; please place the order again.", gone: gone.map((i) => i.sku) };
   const d = Utilities.formatDate(new Date(), "Asia/Karachi", "yyMMdd");
   const no = "AT-" + d + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
-  const lines = list.map((i) => `${i.b || ""} ${i.n || ""}${i.s ? " (size " + i.s + ")" : ""} [${i.sku}] ${rs(i.price)}`);
+  // free gift check: never blocks the customer, but tells you in the order email if the gift does not follow the offer rules
+  const free = list.filter((i) => i.gift || +i.price === 0), now = Date.now();
+  const jackets = list.filter((i) => !(i.gift || +i.price === 0) && +((cat[i.sku] || {}).price || i.price) >= LAUNCH.min).length;
+  const giftOk = !free.length || (free.length === 1 && jackets >= 1 && now >= Date.parse(LAUNCH.start) && now <= Date.parse(LAUNCH.end) + 36e5
+    && +((cat[free[0].sku] || {}).price || 0) <= (jackets >= 2 ? LAUNCH.menMax : LAUNCH.kidsMax));
+  const lines = list.map((i) => (i.gift || +i.price === 0) ? `FREE GIFT (${LAUNCH.name}): ${i.b || ""} ${String(i.n || "").replace(/^FREE GIFT \([^)]*\) /, "")}${i.s ? " (size " + i.s + ")" : ""} [${i.sku}] Rs 0 (worth ${rs((cat[i.sku] || {}).price)})`
+    : `${i.b || ""} ${i.n || ""}${i.s ? " (size " + i.s + ")" : ""} [${i.sku}] ${rs(i.price)}`);
   const subtotal = +p.subtotal || 0, discount = +p.discount || 0, goods = Math.max(0, subtotal - discount);
   // same rule as the website, so the sheet and emails always match it; during a sale, items count at their regular price
-  const delivery = Math.max(goods, +p.regular || 0) >= FREE_OVER ? 0 : DELIVERY_FEE;
+  const delivery = Math.max(goods, +p.regular || 0) >= FREE_OVER || (free.length && giftOk) ? 0 : DELIVERY_FEE;
   const o = { at: new Date(), no, status: "New", name, phone, email, city, address, note, items: lines.join("\n"), subtotal, discount, delivery, total: goods + delivery, updated: new Date() };
   add("Orders", ORDER_COLS, o);
   const wa = waLink(phone, `Hi ${name}! ${STORE} here. We received your order ${no} (${rs(o.total)}). Please reply "Yes" to confirm.`);
-  notify(`Naya order ${no}: ${rs(o.total)} (${city})`, `${name}\n${phone}${email ? "\n" + email : ""}\n${city}\n${address}${note ? "\nNote: " + note : ""}\n\n${o.items}\n\nSubtotal ${rs(o.subtotal)}\nDiscount -${rs(o.discount)}\nDelivery ${rs(o.delivery)}\nTotal ${rs(o.total)} (COD)\n\nCustomer ko confirm karein: ${wa}\nStatus badalne ke liye Orders sheet mein "status" column badlein.`);
+  notify(`Naya order ${no}: ${rs(o.total)} (${city})`, `${name}\n${phone}${email ? "\n" + email : ""}\n${city}\n${address}${note ? "\nNote: " + note : ""}\n\n${o.items}${free.length ? (giftOk ? `\n\n🎁 ${LAUNCH.name}: free gift sahi hai (${jackets} jacket). Gift bhi pack karein.` : `\n\n⚠ GIFT CHECK: free gift offer ke rule par poora nahi (${jackets} jacket Rs ${LAUNCH.min}+). Confirm karne se pehle customer se baat karein.`) : ""}\n\nSubtotal ${rs(o.subtotal)}\nDiscount -${rs(o.discount)}\nDelivery ${rs(o.delivery)}\nTotal ${rs(o.total)} (COD)\n\nCustomer ko confirm karein: ${wa}\nStatus badalne ke liye Orders sheet mein "status" column badlein.`);
   if (email) mailCustomer(o, "Order received", `Thank you, ${name}! We have received your order and will confirm it soon by WhatsApp or call.`);
   return { ok: true, no, total: o.total };
 }

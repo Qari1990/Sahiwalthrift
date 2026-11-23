@@ -1,3 +1,4 @@
+window.TPL={"name": "Website Grand Launch", "start": 1795374000000, "end": 1795978799000, "min": 1999, "endTxt": "29 Nov, 11:59 PM", "q": ["ST-PUF-0047", "ST-PUF-0045", "ST-PUF-0044", "ST-PUF-0042", "ST-PUF-0040", "ST-PUF-0011", "ST-DEN-0004", "ST-PUF-0002", "ST-PUF-0001"], "kids": [{"sku": "ST-SWE-0024", "b": "Quiksilver", "n": "Crewneck Sweatshirt", "p": 499, "s": "7-8Y", "i": "img/ST-SWE-0024-1.jpg"}, {"sku": "ST-SWE-0027", "b": "Okaïdi", "n": "Striped Sweatshirt with Fisherman Embroidery", "p": 499, "s": "11-12Y", "i": "img/ST-SWE-0027-1.jpg"}, {"sku": "ST-SWE-0028", "b": "Squared & Cubed", "n": "Striped Sweatshirt with 'smile' embroidery", "p": 499, "s": "11-12Y", "i": "img/ST-SWE-0028-1.jpg"}, {"sku": "ST-SWE-0029", "b": "TAPE A L'OEIL", "n": "Printed Crewneck Sweatshirt", "p": 499, "s": "11-12Y", "i": "img/ST-SWE-0029-1.jpg"}, {"sku": "ST-SWE-0058", "b": "C&A", "n": "Unicorn Sweatshirt with Faux Fur Cuffs", "p": 499, "s": "9-10Y", "i": "img/ST-SWE-0058-1.jpg"}, {"sku": "ST-SWE-0035", "b": "KIABI", "n": "Amore Solamente Crew Neck Sweatshirt", "p": 399, "s": "5-6Y", "i": "img/ST-SWE-0035-1.jpg"}, {"sku": "ST-SWE-0036", "b": "ORCHESTRA", "n": "Say It With Flowers Printed Sweatshirt", "p": 399, "s": "9-10Y", "i": "img/ST-SWE-0036-1.jpg"}, {"sku": "ST-SWE-0054", "b": "Inextenso", "n": "Two-Tone Funnel Neck Sweatshirt with BRKLYN Print", "p": 399, "s": "9-10Y", "i": "img/ST-SWE-0054-1.jpg"}, {"sku": "ST-SWE-0014", "b": "ABCThrift Select", "n": "Raglan Sweatshirt with Elbow Patches", "p": 499, "s": "2-3Y", "i": "img/ST-SWE-0014-1.jpg"}, {"sku": "ST-SWE-0015", "b": "ABCThrift Select", "n": "Puff Sleeve Sweatshirt", "p": 499, "s": "2-3Y", "i": "img/ST-SWE-0015-1.jpg"}, {"sku": "ST-SWE-0023", "b": "ABCThrift Select", "n": "Awesome Dog Team Sweatshirt", "p": 499, "s": "7-8Y", "i": "img/ST-SWE-0023-1.jpg"}, {"sku": "ST-SWE-0025", "b": "ABCThrift Select", "n": "Christmas Teddy Bear Graphic Sweatshirt", "p": 499, "s": "7-8Y", "i": "img/ST-SWE-0025-1.jpg"}], "men": [{"sku": "ST-SWE-0017", "b": "Sean John", "n": "19 Quarter-Zip Sweatshirt", "p": 699, "s": "S", "i": "img/ST-SWE-0017-1.jpg"}, {"sku": "ST-SWE-0031", "b": "LMA", "n": "Half-Zip Sweatshirt with Shoulder and Elbow Panels", "p": 699, "s": "M", "i": "img/ST-SWE-0031-1.jpg"}, {"sku": "ST-SWE-0039", "b": "OBEY", "n": "Half-Zip Sweatshirt", "p": 699, "s": "S", "i": "img/ST-SWE-0039-1.jpg"}, {"sku": "ST-SWE-0048", "b": "Mariner", "n": "Embroidered Crewneck Sweatshirt", "p": 599, "s": "XL", "i": "img/ST-SWE-0048-1.jpg"}, {"sku": "ST-SWE-0051", "b": "DASSY", "n": "Half-Zip Stand Collar Sweatshirt", "p": 599, "s": "L", "i": "img/ST-SWE-0051-1.jpg"}]};
 (function(){
 var T=window.TP,root=T.root,L={get:function(k,d){try{var v=localStorage.getItem('tp-'+k);return v?JSON.parse(v):d}catch(e){return d}},set:function(k,v){try{localStorage.setItem('tp-'+k,JSON.stringify(v))}catch(e){}}};
 function $(i){return document.getElementById(i)}
@@ -28,28 +29,53 @@ var an=all('#ann span'),ai=0;if(an.length>1)setInterval(function(){an[ai].classN
 
 // bag + checkout
 var bag=L.get('bag',[]),wish=L.get('wish',[]),V=T.voucher,vc=L.get('voucher',null),step='cart';
-function price(it){return deal&&deal.sku===it.sku?deal.price:cp(it.p)}
+// Website Grand Launch (site.json "launch", gift pools from launch.py as window.TPL): 1 jacket of Rs 1,999+ = a kids sweatshirt free,
+// 2+ jackets = a men's sweatshirt free, plus free delivery. The gift is a real piece added to the bag (f:'kids'|'men', price 0); same rule in Code.gs
+var G=window.TPL,gl=G&&Date.now()>=G.start&&Date.now()<G.end?G:null,liveM={};
+function isQ(it){return !!gl&&!it.f&&gl.q.indexOf(it.sku)>-1}
+function glGone(sku){var s=liveM[sku];return !!s&&(s.state==='sold'||s.state==='ordered')}
+function glPool(k,keep){return gl?gl[k].filter(function(x){return x.sku===keep||(!glGone(x.sku)&&!bag.some(function(y){return y.sku===x.sku}))}):[]}
+function glTier(){var n=bag.filter(isQ).length;return n>=2?'men':n?'kids':''}
+function glGift(){return bag.filter(function(x){return x.f})[0]}
+function glOpts(t){return t==='men'?glPool('men').map(function(x){return Object.assign({},x,{f:'men'})}).concat(glPool('kids').map(function(x){return Object.assign({},x,{f:'kids'})})):t?glPool('kids').map(function(x){return Object.assign({},x,{f:'kids'})}):[]}
+// the customer picks the free gift (WAQAR 23 Nov: never auto-add); a gift that no longer fits the bag is taken out
+function glSync(){if(!G)return;var tier=gl?glTier():'',g=glGift(),ch=0,b0=bag.length;
+ bag=bag.filter(function(x){return !x.f||x===g});if(bag.length<b0)ch=1;
+ if(g&&(!tier||glGone(g.sku)||(tier==='kids'&&g.f==='men'))){bag=bag.filter(function(x){return x!==g});ch=1}
+ if(ch)L.set('bag',bag);return ch}
+function price(it){return it.f?0:deal&&deal.sku===it.sku?deal.price:cp(it.p)}
 // free delivery counts items at their regular price, so a sale never takes free delivery away (same rule in Code.gs)
-function totals(){var sub=0,reg=0,n=bag.length;bag.forEach(function(it){sub+=price(it);reg+=it.p});var bd=0,lbl='';(T.bundle||[]).forEach(function(b){if(n>=b.min){bd=b.off?b.off:Math.round(sub*b.pct/100);lbl=n+' items bundle'}});
- var vd=vc&&V&&n&&sub-bd>=V.minOrder?V.amount:0,goods=sub-bd-vd,del=!n||!T.fee||(T.freeOver&&Math.max(goods,reg)>=T.freeOver)?0:T.fee;return {sub:sub,reg:reg,bd:bd,lbl:lbl,vd:vd,del:del,goods:goods,total:goods+del}}
-function nextTip(){var n=bag.length,nx=(T.bundle||[]).filter(function(b){return b.min>n})[0],t=totals();if(!n)return 'Your bag is empty. Tap + on an item to add it.';
+// a Grand Launch gift replaces the bundle discount and voucher on that order; qualifying jackets always ship free
+function totals(){var paid=bag.filter(function(x){return !x.f}),g=glGift(),sub=0,reg=0,n=paid.length;paid.forEach(function(it){sub+=price(it);reg+=it.p});var bd=0,lbl='';if(!g)(T.bundle||[]).forEach(function(b){if(n>=b.min){bd=b.off?b.off:Math.round(sub*b.pct/100);lbl=n+' items bundle'}});
+ var vd=!g&&vc&&V&&n&&sub-bd>=V.minOrder?V.amount:0,goods=sub-bd-vd,del=!n||!T.fee||paid.some(isQ)||(T.freeOver&&Math.max(goods,reg)>=T.freeOver)?0:T.fee;return {sub:sub,reg:reg,bd:bd,lbl:lbl,vd:vd,del:del,goods:goods,total:goods+del,gift:g}}
+function nextTip(){var gt=glTip();if(gt)return gt;var n=bag.length,nx=(T.bundle||[]).filter(function(b){return b.min>n})[0],t=totals();if(!n)return 'Your bag is empty. Tap + on an item to add it.';
  if(t.del)return 'Add '+rs(T.freeOver-Math.max(t.goods,t.reg))+' more for free delivery!'+(nx?' Add '+(nx.min-n)+' more item(s) for '+(nx.off?rs(nx.off):nx.pct+'%')+' off.':'');
  if(nx)return 'Add '+(nx.min-n)+' more item(s) and save '+(nx.off?rs(nx.off):nx.pct+'%')+'!';return 'Bundle discount and free delivery applied.'}
+function glTip(){if(!gl||!bag.length)return '';var t=glTier(),g=glGift(),m=rs(gl.min);
+ if(!t)return 'Grand Launch: add a men\'s jacket of '+m+'+ and pick a FREE sweatshirt + free delivery.';
+ var left=glOpts(t).length;if(!g&&left)return '🎁 Your free gift is unlocked! Pick it below'+(t==='kids'?' (add 1 more jacket for a men\'s sweatshirt).':'.');
+ if(t==='kids')return 'Free gift in your bag! Add 1 more jacket ('+m+'+) and you can pick a men\'s sweatshirt instead.';
+ return g?'Grand Launch: free gift and free delivery applied.':'Grand Launch: free delivery applied. All free gifts are claimed right now.'}
 function sumHtml(t){var vline=V?(vc?(t.vd?'<div><span>Voucher '+esc(V.code)+'</span><b>-'+rs(t.vd)+'</b></div>':'<div class="mut"><span>Voucher '+esc(V.code)+' (on '+rs(V.minOrder)+'+)</span><b>-</b></div>'):'<button type="button" class="o-link" data-voucher>Free '+rs(V.amount)+' voucher: claim it</button>'):'';
+ if(t.gift)vline='<div class="ok gl-line"><span>🎁 '+esc(gl?gl.name:'Grand Launch')+' gift</span><b>FREE</b></div>';
  return '<div><span>Subtotal</span><b>'+rs(t.sub)+'</b></div>'+(t.bd?'<div class="ok"><span>'+t.lbl+'</span><b>-'+rs(t.bd)+'</b></div>':'')+vline+'<div><span>Delivery</span><b>'+(t.del?rs(t.del):'Free')+'</b></div><div class="tot"><span>Total (cash on delivery)</span><b>'+rs(t.total)+'</b></div>'}
 function counts(){[$('bag-n')].concat(all('[data-bag-n]')).forEach(function(c){if(c){c.textContent=bag.length;c.hidden=!bag.length}});all('[data-wish-n]').forEach(function(c){c.textContent=wish.length;c.hidden=!wish.length})}
 function draw(){counts();
  all('[data-add]').forEach(function(b){var it=JSON.parse(b.dataset.add),in_=bag.some(function(x){return x.sku===it.sku});b.classList.toggle('in',in_);if(b.classList.contains('addbag'))b.textContent=in_?'In your bag ✓':'Add to bag';else b.textContent=in_?'✓':'+'});
  all('[data-wish]').forEach(function(b){var it=JSON.parse(b.dataset.wish);b.classList.toggle('on',wish.some(function(x){return x.sku===it.sku}))});
  if(!$('bag-list'))return;var t=totals();$('bag-tip').textContent=nextTip();
- $('bag-list').innerHTML=bag.map(function(it,i){return '<div class="bi">'+(it.i?'<img src="'+root+esc(it.i)+'" alt="">':'<span></span>')+'<div><b>'+esc(it.b)+'</b><span>'+esc(it.n)+(it.s?' · '+esc(it.s):'')+'</span><em>'+rs(price(it))+(price(it)<it.p?' <s>'+rs(it.p)+'</s>':'')+'</em></div><button type="button" data-rm="'+i+'" aria-label="Remove">×</button></div>'}).join('');
+ $('bag-list').innerHTML=bag.map(function(it,i){return '<div class="bi'+(it.f?' bi-gift':'')+'">'+(it.i?'<img src="'+root+esc(it.i)+'" alt="">':'<span></span>')+'<div>'+(it.f?'<i class="bi-gl">🎁 Free gift</i>':'')+'<b>'+esc(it.b)+'</b><span>'+esc(it.n)+(it.s?' · '+esc(it.s):'')+'</span><em>'+(it.f?'<s>'+rs(it.p)+'</s> FREE':rs(price(it))+(price(it)<it.p?' <s>'+rs(it.p)+'</s>':''))+'</em>'+(it.f?'<small class="gl-chg">Want another? Remove it (×) and pick again.</small>':'')+'</div><button type="button" data-rm="'+i+'" aria-label="Remove">×</button></div>'}).join('')+glChooser();
  $('bag-sum').innerHTML=bag.length?sumHtml(t):'';$('co-sum').innerHTML=bag.length?sumHtml(t):'';$('bag-go').hidden=!bag.length;
  if(!bag.length&&step==='co')show('cart')}
+function glChooser(){var t=gl?glTier():'',g=glGift();if(!t||(g&&!(t==='men'&&g.f==='kids')))return '';var o=glOpts(t).filter(function(x){return !g||x.f==='men'});if(!o.length)return '';
+ return '<div class="gl-ch"><b>🎁 '+(g?'Upgrade: swap for a men\'s sweatshirt':'Choose your FREE gift')+'</b><span>'+(g?'You have 2 jackets, so a men\'s sweatshirt is free too. Tap one to swap.':t==='men'?'2 jackets: pick a men\'s sweatshirt (or a kids one)':'1 jacket: pick a kids sweatshirt · add 1 more jacket for a men\'s sweatshirt')+'</span><div class="gl-ch-row">'+o.map(function(x){return '<button type="button" class="gl-opt" data-glopt="'+esc(x.sku)+'|'+x.f+'">'+(x.i?'<img src="'+root+esc(x.i)+'" alt="" loading="lazy">':'')+'<b>'+esc(x.b)+'</b><small>'+esc(x.s||'')+'</small><s>'+rs(x.p)+'</s><em>FREE</em><i>Add free</i></button>'}).join('')+'</div></div>'}
+document.addEventListener('click',function(e){var o=e.target.closest('[data-glopt]');if(!o||!gl)return;var v=o.dataset.glopt.split('|'),x=gl[v[1]].filter(function(y){return y.sku===v[0]})[0];if(!x||glGone(x.sku))return;
+ bag=bag.filter(function(y){return !y.f});bag.push(Object.assign({},x,{f:v[1]}));L.set('bag',bag);px('AddToCart',{content_ids:[x.sku],content_type:'product',value:0});draw();toast('🎁 Free gift added: '+x.b)});
 function show(s){if(s==='co'&&step!=='co'&&bag.length)px('InitiateCheckout',Object.assign(pxItems(bag),{value:totals().total}));step=s;$('bag-cart').hidden=s!=='cart';$('co').hidden=s!=='co';$('co-done').hidden=s!=='done';$('bag-title').textContent=s==='co'?'Checkout':s==='done'?'Order sent':'Your bag';
  if(s==='co'){var c=L.get('cust',{}),f=$('co');['name','phone','city','address','email'].forEach(function(k){if(c[k]&&!f[k].value)f[k].value=c[k]})}}
 function open_(s){var b=$('bag');b.hidden=false;document.body.classList.add('noscroll');show(s||'cart');draw()}
 function close_(id){$(id).hidden=true;document.body.classList.remove('noscroll')}
-function add(it){if(!bag.some(function(x){return x.sku===it.sku})){bag.push(it);L.set('bag',bag);px('AddToCart',{content_ids:[it.sku],content_type:'product',content_name:(it.b+' '+it.n).trim(),value:price(it)})}}
+function add(it){if(!bag.some(function(x){return x.sku===it.sku})){bag.push(it);L.set('bag',bag);glSync();px('AddToCart',{content_ids:[it.sku],content_type:'product',content_name:(it.b+' '+it.n).trim(),value:price(it)})}}
 function orderNo(){var d=pkt(),p=function(n){return (n<10?'0':'')+n};return 'AT-'+String(d.getUTCFullYear()).slice(2)+p(d.getUTCMonth()+1)+p(d.getUTCDate())+'-'+Math.random().toString(36).slice(2,6).toUpperCase()}
 function api(body){var j=JSON.stringify(body);function get(){return fetch(T.api+(T.api.indexOf('?')<0?'?':'&')+'p='+encodeURIComponent(j)).then(function(r){return r.json()})}return fetch(T.api,{method:'POST',body:j}).then(function(r){return r.json()}).then(function(r){return r&&r.error==='unknown action'?get():r},get)}
 $('co')&&($('co').onsubmit=function(e){e.preventDefault();var f=e.target,err=$('co-err'),c={},via=(e.submitter&&e.submitter.dataset.via)||'site';['name','phone','city','address','note','email'].forEach(function(k){c[k]=f[k].value.trim()});
@@ -57,9 +83,9 @@ $('co')&&($('co').onsubmit=function(e){e.preventDefault();var f=e.target,err=$('
  if(!/^(92|0)?3\d{9}$/.test(ph)){err.textContent='Please enter a valid mobile number (03xx xxxxxxx).';return}
  if(c.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email)){err.textContent='Please enter a valid email or leave it blank.';return}
  if(!f.agree.checked){err.textContent='Please accept the terms and return policy.';return}err.textContent='';
- var t=totals(),items=bag.map(function(it){return {sku:it.sku,b:it.b,n:it.n,s:it.s,price:price(it)}});
- function waMsg(no){return 'Hi! '+(via==='site'?'Website order':'New order')+' *'+no+'* ('+T.store+')\n\n'+bag.map(function(it,i){return (i+1)+'. '+it.b+' '+it.n+(it.s?' (size '+it.s+')':'')+' ['+it.sku+'] '+rs(price(it))}).join('\n')+
- '\n\n'+(camp?camp.name+' prices ('+camp.pct+'% off)\n':'')+'Subtotal '+rs(t.sub)+(t.bd?'\n'+t.lbl+' -'+rs(t.bd):'')+(t.vd?'\nVoucher '+V.code+' -'+rs(t.vd):'')+'\nDelivery '+(t.del?rs(t.del):'Free')+'\n*Total '+rs(t.total)+' (Cash on delivery)*\n\nName: '+c.name+'\nPhone: '+c.phone+'\nCity: '+c.city+'\nAddress: '+c.address+(c.note?'\nNote: '+c.note:'')}
+ var t=totals(),items=bag.map(function(it){return {sku:it.sku,b:it.b,n:(it.f?'FREE GIFT ('+(gl?gl.name:'Grand Launch')+') ':'')+it.n,s:it.s,price:price(it),gift:it.f?1:0}});
+ function waMsg(no){return 'Hi! '+(via==='site'?'Website order':'New order')+' *'+no+'* ('+T.store+')\n\n'+bag.map(function(it,i){return (i+1)+'. '+(it.f?'🎁 FREE GIFT: ':'')+it.b+' '+it.n+(it.s?' (size '+it.s+')':'')+' ['+it.sku+'] '+(it.f?'FREE':rs(price(it)))}).join('\n')+
+ '\n\n'+(camp?camp.name+' prices ('+camp.pct+'% off)\n':'')+(t.gift?'🎁 '+(gl?gl.name:'Grand Launch')+': free gift + free delivery\n':'')+'Subtotal '+rs(t.sub)+(t.bd?'\n'+t.lbl+' -'+rs(t.bd):'')+(t.vd?'\nVoucher '+V.code+' -'+rs(t.vd):'')+'\nDelivery '+(t.del?rs(t.del):'Free')+'\n*Total '+rs(t.total)+' (Cash on delivery)*\n\nName: '+c.name+'\nPhone: '+c.phone+'\nCity: '+c.city+'\nAddress: '+c.address+(c.note?'\nNote: '+c.note:'')}
  function done(no,url,onSite){px('Purchase',Object.assign(pxItems(bag),{value:t.total,order_id:no}));var o=L.get('orders',[]);o.unshift({no:no,date:today,items:bag.length,total:t.total,phone:c.phone});L.set('orders',o.slice(0,10));L.set('cust',{name:c.name,phone:c.phone,city:c.city,address:c.address,email:c.email});
   $('co-done').innerHTML='<p class="eyebrow">Thank you, '+esc(c.name)+'!</p><h3>Order '+esc(no)+'</h3>'+(onSite?'<p>We have received your order and will confirm it soon by WhatsApp or call'+(c.email?'. A confirmation email is on its way to '+esc(c.email):'')+'.</p><a class="ask" href="'+esc(url)+'" target="_blank" rel="noopener">Also send on WhatsApp (faster confirmation)</a>':'<p>Your order has opened in WhatsApp. Please tap <b>Send</b> there to complete it.</p><a class="buy" href="'+esc(url)+'" target="_blank" rel="noopener">Open WhatsApp again</a>')+
   '<p class="bag-note">Total '+rs(t.total)+', pay when the parcel arrives. <a href="'+root+'track.html?o='+encodeURIComponent(no)+'">Track order</a></p>';
@@ -67,7 +93,7 @@ $('co')&&($('co').onsubmit=function(e){e.preventDefault();var f=e.target,err=$('
  function viaWa(){var no=orderNo(),url='https://wa.me/'+T.wa+'?text='+encodeURIComponent(waMsg(no));if(!window.open(url,'_blank'))location.href=url;done(no,url,false)}
  if(via==='wa'||!T.api)return viaWa();
  var btn=e.submitter;btn.disabled=true;btn.textContent='Placing order...';
- api({a:'order',name:c.name,phone:c.phone,email:c.email,city:c.city,address:c.address,note:c.note,items:items,subtotal:t.sub,regular:t.reg,discount:t.bd+t.vd,delivery:t.del,total:t.total}).then(function(r){btn.disabled=false;btn.textContent='Place order · Cash on delivery';
+ api({a:'order',name:c.name,phone:c.phone,email:c.email,city:c.city,address:c.address,note:c.note,items:items,subtotal:t.sub,regular:t.reg,discount:t.bd+t.vd,delivery:t.del,total:t.total,gift:t.gift?t.gift.sku:''}).then(function(r){btn.disabled=false;btn.textContent='Place order · Cash on delivery';
   if(r.error){err.textContent=r.error;if(r.gone){bag=bag.filter(function(x){return r.gone.indexOf(x.sku)<0});L.set('bag',bag);draw()}return}
   done(r.no,'https://wa.me/'+T.wa+'?text='+encodeURIComponent(waMsg(r.no)),true)}).catch(function(){btn.disabled=false;btn.textContent='Place order · Cash on delivery';err.textContent='We could not reach our order system, so your order is opening in WhatsApp instead.';viaWa()})});
 var nf=$('news');nf&&(nf.onsubmit=function(e){e.preventDefault();var m=$('news-msg'),em=nf.email.value.trim();if(!T.api){location.href='https://wa.me/'+T.wa+'?text='+encodeURIComponent('Please tell me about new drops. Email: '+em);return}
@@ -81,7 +107,7 @@ document.addEventListener('click',function(e){var a=e.target.closest('[data-add]
  if(e.target.closest('[data-bag-close]')||e.target.id==='bag')return close_('bag');
  if(e.target.closest('[data-menu-open]')){$('menu').hidden=false;document.body.classList.add('noscroll');return}
  if(e.target.closest('[data-menu-close]')||e.target.id==='menu')return close_('menu');
- var r=e.target.closest('[data-rm]');if(r){bag.splice(+r.dataset.rm,1);L.set('bag',bag);draw();return}
+ var r=e.target.closest('[data-rm]');if(r){var gone_=bag.splice(+r.dataset.rm,1)[0];L.set('bag',bag);glSync();draw();return}
  if(e.target.closest('[data-voucher]'))return pop(true);
  if(e.target.closest('[data-pop-close]')||e.target.id==='pop'){$('pop').hidden=true;L.set('pop',1)}});
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){['bag','menu','pop'].forEach(function(i){if($(i)&&!$(i).hidden)close_(i)})}});
@@ -107,12 +133,26 @@ document.addEventListener('click',function(e){var a=e.target.closest('a[href*="w
  function apply(m){var sf=$('sold');all('.card[data-sku]').forEach(function(el){var s=m[el.dataset.sku];if(!gone(s)||el.classList.contains('is-sold'))return;el.classList.add('is-sold');var ci=el.querySelector('.ci');if(ci){[].forEach.call(ci.querySelectorAll('.b-new,.b-camp,.b-deal,.b-offer'),function(b){b.remove()});var b=document.createElement('span');b.className='b-sold';b.textContent=s.state==='sold'?'Sold out':'Reserved';ci.appendChild(b)}var a=el.querySelector('.cadd');a&&a.remove();if(sf&&!sf.checked)el.hidden=true});
   var bt=document.querySelector('.cta [data-buy]'),sku='';try{sku=bt&&JSON.parse(bt.dataset.buy).sku}catch(e){}
   if(sku&&gone(m[sku])){var cta=bt.closest('.cta'),p=document.createElement('p');p.className='soldmsg';p.textContent=m[sku].state==='sold'?'This item has been sold. See similar items below or ask us on WhatsApp.':'This item is reserved for another order right now. Ask us on WhatsApp and we will tell you if it comes back.';cta.parentNode.insertBefore(p,cta);cta.remove();var o=document.querySelector('.offer');o&&o.remove()}
-  var nb=bag.filter(function(x){return !gone(m[x.sku])});if(nb.length<bag.length){bag=nb;L.set('bag',bag);draw()}}
+  liveM=m;var nb=bag.filter(function(x){return !gone(m[x.sku])});if(nb.length<bag.length){bag=nb;L.set('bag',bag)}glSync();draw();glMark()}
  if(c&&Date.now()-c.t<120000)apply(c.m);else fetch(T.api+'?a=all').then(function(r){return r.json()}).then(function(m){if(m&&!m.error){try{sessionStorage.setItem(K,JSON.stringify({t:Date.now(),m:m}))}catch(e){}apply(m)}}).catch(function(){})})();
 // WhatsApp order message carries the item's size and page link, so the customer never has to explain which piece
 (function(){var bt=document.querySelector('.cta [data-buy]');if(!bt)return;var it;try{it=JSON.parse(bt.dataset.buy)}catch(e){return}var url=location.href.split('#')[0].split('?')[0];
  all('a[href*="wa.me/"],[data-deal-href],[data-camp-href]').forEach(function(a){['href','data-deal-href','data-camp-href'].forEach(function(k){var h=a.getAttribute(k);if(!h||h.indexOf('wa.me/')<0||h.indexOf('text=')<0)return;var u=h.split('text='),t=decodeURIComponent(u[1]);if(t.indexOf(it.sku)<0||t.indexOf('/p/')>-1)return;t=t.replace('Is it available?','')+(it.s&&t.indexOf('size')<0?'\nSize: '+it.s:'')+'\nLink: '+url+'\nIs it available?';a.setAttribute(k,u[0]+'text='+encodeURIComponent(t))})})})();
-draw()})();
+// Grand Launch on every page (works on pages built before the offer): top bar, nav link, card badges, product-page note, homepage banner, countdown
+function glMark(){if(!gl)return;all('.card[data-sku]').forEach(function(el){if(gl.q.indexOf(el.dataset.sku)<0||el.classList.contains('is-sold')||el.querySelector('.b-gl'))return;var ci=el.querySelector('.ci');if(!ci)return;var b=document.createElement('span');b.className='b-gl';b.textContent='🎁 Free gift inside';ci.insertBefore(b,ci.firstChild)})}
+function glUI(){if(!gl)return;document.body.classList.add('gl-live');var R=root+'grand-launch.html',m=rs(gl.min);
+ var bar=document.createElement('a');bar.className='glbar';bar.href=R;bar.innerHTML='<b>'+esc(gl.name)+'</b><span>Buy 1 jacket: kids sweatshirt FREE · Buy 2: men\'s sweatshirt FREE · Free delivery</span><span class="glbar-t">Ends in <time data-gl-left>--</time></span><i>Shop →</i>';document.body.insertBefore(bar,document.body.firstChild);
+ all('.nav-deals').forEach(function(a){a.href=R;a.textContent='Grand Launch 🎁'});
+ glMark();
+ var bt=document.querySelector('.cta [data-buy]'),sku='';try{sku=bt&&JSON.parse(bt.dataset.buy).sku}catch(e){}
+ if(sku&&gl.q.indexOf(sku)>-1){var cta=bt.closest('.cta'),n=document.createElement('a');n.className='gl-note';n.href=R;n.innerHTML='<b>🎁 '+esc(gl.name)+': this jacket comes with a FREE kids sweatshirt + free delivery</b><span>Buy any 2 jackets of '+m+'+ and get a men\'s sweatshirt FREE instead. Pick your free gift in the bag · ends in <time data-gl-left></time></span>';cta.parentNode.insertBefore(n,cta)}
+ var sl=$('slider');if(sl&&!document.querySelector('.glp')){var h=document.createElement('a');h.className='glhome';h.href=R;h.innerHTML='<span class="glhome-k">'+esc(gl.name)+' · until '+esc(gl.endTxt)+'</span><b>Buy a jacket. Get a sweatshirt <em>FREE</em>.</b><span class="glhome-t"><span>1 jacket '+m+'+ → kids sweatshirt free</span><span>2 jackets → men\'s sweatshirt free</span><span>Free delivery</span></span><i>See the offer →</i>';sl.parentNode.insertBefore(h,sl)}
+ function tk(){var left=Math.max(0,Math.floor((gl.end-Date.now())/1000)),d=Math.floor(left/86400),h=Math.floor(left%86400/3600),mi=Math.floor(left%3600/60),se=left%60;
+  all('[data-gl-left]').forEach(function(e){e.textContent=(d?d+'d ':'')+p2(h)+':'+p2(mi)+':'+p2(se)});
+  all('[data-gl-clock]').forEach(function(e){var u={d:d,h:p2(h),m:p2(mi),s:p2(se)};[].forEach.call(e.querySelectorAll('[data-u]'),function(b){b.textContent=u[b.dataset.u]})});
+  if(!left){gl=null;document.body.classList.remove('gl-live');clearInterval(glT);all('.glbar,.gl-note,.glhome,.b-gl').forEach(function(x){x.remove()});glSync();draw()}}
+ var glT=setInterval(tk,1000);tk()}
+glSync();draw();glUI()})();
 /* Product photo zoom: hover zoom on desktop, full-screen viewer with pinch / double-tap zoom and swipe on mobile */
 (function(){
 var gal=document.getElementById('gal');if(!gal)return;
