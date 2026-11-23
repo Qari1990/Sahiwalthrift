@@ -15,6 +15,9 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
+sys.path.insert(0, str(Path(__file__).parent))
+import launch  # noqa: E402  Website Grand Launch gift offer
+
 ROOT = Path(__file__).resolve().parent.parent
 CFG = json.loads((ROOT / "site.json").read_text())
 OUT, CACHE = ROOT / "public", ROOT / "cache"
@@ -1334,6 +1337,9 @@ def sitemap(base, rows):
 
 def main(items_dir, assets_dir):
     items = load_items(items_dir)
+    global JS, JS_FILE  # Grand Launch gift pools (site.json "launch", scripts/launch.py) ride at the top of the shared site.js
+    JS = launch.js_prefix([{**i, "img": f"img/{i['sku']}-1.jpg" if i["images"] else "", "sold": i["status"] == "Sold"} for i in items]) + JS
+    JS_FILE = f"site.{_h(JS)}.js"
     tmp = ROOT / "public.new"; shutil.rmtree(tmp, ignore_errors=True); (tmp / "img").mkdir(parents=True); (tmp / "p").mkdir()
     counts, report = {}, {}
     try: OLD_REPORT = json.loads((OUT / "photo-report.json").read_text())
@@ -1417,7 +1423,7 @@ def main(items_dir, assets_dir):
     newest = lambda its: max((str(i["updated"])[:10] for i in its), default="")
     coll_rows = [(f"{slug}.html", newest([i for i in items if fn(i)]), []) for slug, _, _, _, _, fn in built]
     brand_rows = [(f"brands/{b}.html", newest([i for i in items if slugify(i["brand"]) == b]), []) for b in BRANDS] + ([("brands.html", newest(items), [])] if BRANDS else [])
-    (tmp / "sitemap.xml").write_text(sitemap(base, [("", day.strftime("%Y-%m-%d"), []), ("deals.html", day.strftime("%Y-%m-%d"), []), ("catalogue.html", day.strftime("%Y-%m-%d"), [])] + coll_rows + brand_rows + [(f"{s}.html", "", []) for s, _ in INFO if s not in NOINDEX] +
+    (tmp / "sitemap.xml").write_text(sitemap(base, [("", day.strftime("%Y-%m-%d"), []), ("deals.html", day.strftime("%Y-%m-%d"), []), ("catalogue.html", day.strftime("%Y-%m-%d"), [])] + ([("grand-launch.html", day.strftime("%Y-%m-%d"), [])] if launch.active() else []) + coll_rows + brand_rows + [(f"{s}.html", "", []) for s, _ in INFO if s not in NOINDEX] +
         [(f"p/{i['sku']}.html", str(i["updated"])[:10], [f"{base}/img/{i['sku']}-{n}.jpg" for n in range(1, counts[i["sku"]] + 1)]) for i in items]))
     for f in ("logo.png", "og-image.png"):
         if (Path(__file__).parent / f).exists(): shutil.copy(Path(__file__).parent / f, tmp / f)
@@ -1426,6 +1432,7 @@ def main(items_dir, assets_dir):
     (tmp / ".nojekyll").write_text("")
     shutil.rmtree(OUT, ignore_errors=True); tmp.rename(OUT)
     import runpy; runpy.run_path(str(Path(__file__).parent / "catalogue.py"))["build"](OUT)  # fast price list for WhatsApp / ads
+    launch.build_page(OUT)  # grand-launch.html while site.json "launch" is set
     print(f"{len(items)} items, {sum(counts.values())} photos -> {OUT}")
 
 

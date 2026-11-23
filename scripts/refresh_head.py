@@ -12,8 +12,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import build  # noqa: E402
+import launch  # noqa: E402
 
 OUT = build.OUT
+# Grand Launch gift pools (site.json "launch") come from the cards already on the built homepage
+build.JS = launch.js_prefix(launch.items_from((OUT / "index.html").read_text())) + build.JS
+build.JS_FILE = f"site.{build._h(build.JS)}.js"
 PIXEL_RX = re.compile(r"<script>!function\(f,b,e,v,n,t,s\).*?</noscript>", re.S)
 
 (OUT / "assets").mkdir(exist_ok=True)
@@ -32,4 +36,5 @@ for f in OUT.rglob("*.html"):
     new = PIXEL_RX.sub("", new)
     new = new.replace("</head>", px + "</head>", 1)
     if new != t: f.write_text(new); n += 1
+launch.build_page(OUT)
 print(f"{n} pages updated · {build.JS_FILE} · pixel {'ON ' + str(build.CFG.get('metaPixel')) if px else 'off (metaPixel empty)'}")
