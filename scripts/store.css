@@ -323,3 +323,10 @@ body.camp-live .camphero.camp{display:grid!important}body.camp-live .ocard.camp{
 body:not(.gl-live) .glp .gl-ended{display:block}
 .glsteps{max-width:1180px;margin:22px auto 0;padding:0 16px}.glsteps ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;counter-reset:s}@media(max-width:700px){.glsteps ol{grid-template-columns:1fr}}
 .glsteps li{counter-increment:s;display:grid;gap:4px;border:1px solid var(--line);border-radius:16px;padding:16px}.glsteps li::before{content:counter(s);width:30px;height:30px;border-radius:50%;background:#14082f;color:#c6ff3d;display:grid;place-items:center;font-weight:900}.glsteps span{color:var(--muted);font-size:14px}
+.gl-cp{display:grid;line-height:1.1;margin-top:2px}.gl-cp s{color:var(--muted);font-size:14px;text-decoration-thickness:2px;text-decoration-color:#e0313f}.gl-cp b{font-size:20px;font-weight:900;color:#1f7a45;letter-spacing:.02em}
+.gl-ch{display:grid;gap:6px;margin:8px 0;padding:12px;border-radius:14px;background:#14082f;color:#fff}.gl-ch>b{color:#c6ff3d;font-size:15px}.gl-ch>span{font-size:12.5px;opacity:.85}
+.gl-ch-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scroll-snap-type:x mandatory}
+.gl-opt{flex:none;width:118px;scroll-snap-align:start;display:grid;justify-items:start;gap:1px;text-align:left;background:#fff;color:#14082f;border:0;border-radius:12px;padding:6px;cursor:pointer}
+.gl-opt img{width:106px;height:106px;object-fit:cover;border-radius:8px;margin-bottom:3px}.gl-opt b{font-size:12px;line-height:1.2;max-width:106px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gl-opt small{font-size:11px;color:#66706c}
+.gl-opt s{font-size:11.5px;color:#66706c;text-decoration-color:#e0313f;text-decoration-thickness:2px}.gl-opt em{font-style:normal;font-weight:900;color:#1f7a45;font-size:14px}.gl-opt i{font-style:normal;justify-self:stretch;text-align:center;background:#c6ff3d;color:#14082f;font-weight:800;font-size:12px;border-radius:999px;padding:4px 0;margin-top:3px}
+.gl-chg{display:block;font-size:11px;color:var(--muted)}
