@@ -28,13 +28,14 @@ var an=all('#ann span'),ai=0;if(an.length>1)setInterval(function(){an[ai].classN
 
 // bag + checkout
 var bag=L.get('bag',[]),wish=L.get('wish',[]),V=T.voucher,vc=L.get('voucher',null),step='cart';
-// Website Grand Launch (site.json "launch", gift pools from launch.py as window.TPL): 1 jacket of Rs 1,999+ = a kids sweatshirt free,
-// 2+ jackets = a men's sweatshirt free, plus free delivery. The gift is a real piece added to the bag (f:'kids'|'men', price 0); same rule in Code.gs
+// Website Grand Launch (site.json "launch", gift pools from launch.py as window.TPL): gents jacket Rs 1,999+ = a gents sweatshirt free,
+// ladies jacket (gl.qw) = a kids sweatshirt free, plus free delivery; one gift per order (WAQAR 24 Nov). The gift is a real piece added to the bag (f:'kids'|'men', price 0); same rule in Code.gs
 var G=window.TPL,gl=G&&Date.now()>=G.start&&Date.now()<G.end?G:null,liveM={};
 function isQ(it){return !!gl&&!it.f&&gl.q.indexOf(it.sku)>-1}
 function glGone(sku){var s=liveM[sku];return !!s&&(s.state==='sold'||s.state==='ordered')}
 function glPool(k,keep){return gl?gl[k].filter(function(x){return x.sku===keep||(!glGone(x.sku)&&!bag.some(function(y){return y.sku===x.sku}))}):[]}
-function glTier(){var n=bag.filter(isQ).length;return n>=2?'men':n?'kids':''}
+function isW(it){return !!gl&&(gl.qw||[]).indexOf(it.sku)>-1}
+function glTier(){var q=bag.filter(isQ);return q.some(function(x){return !isW(x)})?'men':q.length?'kids':''}
 function glGift(){return bag.filter(function(x){return x.f})[0]}
 function glOpts(t){return t==='men'?glPool('men').map(function(x){return Object.assign({},x,{f:'men'})}).concat(glPool('kids').map(function(x){return Object.assign({},x,{f:'kids'})})):t?glPool('kids').map(function(x){return Object.assign({},x,{f:'kids'})}):[]}
 // the customer picks the free gift (WAQAR 23 Nov: never auto-add); a gift that no longer fits the bag is taken out
@@ -51,9 +52,9 @@ function nextTip(){var gt=glTip();if(gt)return gt;var n=bag.length,nx=(T.bundle|
  if(t.del)return 'Add '+rs(T.freeOver-Math.max(t.goods,t.reg))+' more for free delivery!'+(nx?' Add '+(nx.min-n)+' more item(s) for '+(nx.off?rs(nx.off):nx.pct+'%')+' off.':'');
  if(nx)return 'Add '+(nx.min-n)+' more item(s) and save '+(nx.off?rs(nx.off):nx.pct+'%')+'!';return 'Bundle discount and free delivery applied.'}
 function glTip(){if(!gl||!bag.length)return '';var t=glTier(),g=glGift(),m=rs(gl.min);
- if(!t)return 'Grand Launch: add a men\'s jacket of '+m+'+ and pick a FREE sweatshirt + free delivery.';
- var left=glOpts(t).length;if(!g&&left)return '🎁 Your free gift is unlocked! Pick it below'+(t==='kids'?' (add 1 more jacket for a men\'s sweatshirt).':'.');
- if(t==='kids')return 'Free gift in your bag! Add 1 more jacket ('+m+'+) and you can pick a men\'s sweatshirt instead.';
+ if(!t)return 'Grand Launch: add a gents jacket of '+m+'+ (gents sweatshirt FREE) or a ladies jacket (kids sweatshirt FREE) + free delivery.';
+ var left=glOpts(t).length;if(!g&&left)return '🎁 Your free gift is unlocked! Pick it below.';
+ if(t==='kids')return 'Free kids sweatshirt in your bag! Add a gents jacket ('+m+'+) and you can pick a gents sweatshirt instead.';
  return g?'Grand Launch: free gift and free delivery applied.':'Grand Launch: free delivery applied. All free gifts are claimed right now.'}
 function sumHtml(t){var vline=V?(vc?(t.vd?'<div><span>Voucher '+esc(V.code)+'</span><b>-'+rs(t.vd)+'</b></div>':'<div class="mut"><span>Voucher '+esc(V.code)+' (on '+rs(V.minOrder)+'+)</span><b>-</b></div>'):'<button type="button" class="o-link" data-voucher>Free '+rs(V.amount)+' voucher: claim it</button>'):'';
  if(t.gift)vline='<div class="ok gl-line"><span>🎁 '+esc(gl?gl.name:'Grand Launch')+' gift</span><b>FREE</b></div>';
@@ -67,7 +68,7 @@ function draw(){counts();
  $('bag-sum').innerHTML=bag.length?sumHtml(t):'';$('co-sum').innerHTML=bag.length?sumHtml(t):'';$('bag-go').hidden=!bag.length;
  if(!bag.length&&step==='co')show('cart')}
 function glChooser(){var t=gl?glTier():'',g=glGift();if(!t||(g&&!(t==='men'&&g.f==='kids')))return '';var o=glOpts(t).filter(function(x){return !g||x.f==='men'});if(!o.length)return '';
- return '<div class="gl-ch"><b>🎁 '+(g?'Upgrade: swap for a men\'s sweatshirt':'Choose your FREE gift')+'</b><span>'+(g?'You have 2 jackets, so a men\'s sweatshirt is free too. Tap one to swap.':t==='men'?'2 jackets: pick a men\'s sweatshirt (or a kids one)':'1 jacket: pick a kids sweatshirt · add 1 more jacket for a men\'s sweatshirt')+'</span><div class="gl-ch-row">'+o.map(function(x){return '<button type="button" class="gl-opt" data-glopt="'+esc(x.sku)+'|'+x.f+'">'+(x.i?'<img src="'+root+esc(x.i)+'" alt="" loading="lazy">':'')+'<b>'+esc(x.b)+'</b><small>'+esc(x.s||'')+'</small><s>'+rs(x.p)+'</s><em>FREE</em><i>Add free</i></button>'}).join('')+'</div></div>'}
+ return '<div class="gl-ch"><b>🎁 '+(g?'Upgrade: swap for a gents sweatshirt':'Choose your FREE gift')+'</b><span>'+(g?'You have a gents jacket, so a gents sweatshirt is free too. Tap one to swap.':t==='men'?'Gents jacket: pick a gents sweatshirt (or a kids one)':'Ladies jacket: pick a kids sweatshirt')+'</span><div class="gl-ch-row">'+o.map(function(x){return '<button type="button" class="gl-opt" data-glopt="'+esc(x.sku)+'|'+x.f+'">'+(x.i?'<img src="'+root+esc(x.i)+'" alt="" loading="lazy">':'')+'<b>'+esc(x.b)+'</b><small>'+esc(x.s||'')+'</small><s>'+rs(x.p)+'</s><em>FREE</em><i>Add free</i></button>'}).join('')+'</div></div>'}
 document.addEventListener('click',function(e){var o=e.target.closest('[data-glopt]');if(!o||!gl)return;var v=o.dataset.glopt.split('|'),x=gl[v[1]].filter(function(y){return y.sku===v[0]})[0];if(!x||glGone(x.sku))return;
  bag=bag.filter(function(y){return !y.f});bag.push(Object.assign({},x,{f:v[1]}));L.set('bag',bag);px('AddToCart',{content_ids:[x.sku],content_type:'product',value:0});draw();toast('🎁 Free gift added: '+x.b)});
 function show(s){if(s==='co'&&step!=='co'&&bag.length)px('InitiateCheckout',Object.assign(pxItems(bag),{value:totals().total}));step=s;$('bag-cart').hidden=s!=='cart';$('co').hidden=s!=='co';$('co-done').hidden=s!=='done';$('bag-title').textContent=s==='co'?'Checkout':s==='done'?'Order sent':'Your bag';
@@ -140,12 +141,12 @@ document.addEventListener('click',function(e){var a=e.target.closest('a[href*="w
 // Grand Launch on every page (works on pages built before the offer): top bar, nav link, card badges, product-page note, homepage banner, countdown
 function glMark(){if(!gl)return;all('.card[data-sku]').forEach(function(el){if(gl.q.indexOf(el.dataset.sku)<0||el.classList.contains('is-sold')||el.querySelector('.b-gl'))return;var ci=el.querySelector('.ci');if(!ci)return;var b=document.createElement('span');b.className='b-gl';b.textContent='🎁 Free gift inside';ci.insertBefore(b,ci.firstChild)})}
 function glUI(){if(!gl)return;document.body.classList.add('gl-live');var R=root+'grand-launch.html',m=rs(gl.min);
- var bar=document.createElement('a');bar.className='glbar';bar.href=R;bar.innerHTML='<b>'+esc(gl.name)+'</b><span>Buy 1 jacket: kids sweatshirt FREE · Buy 2: men\'s sweatshirt FREE · Free delivery</span><span class="glbar-t">Ends in <time data-gl-left>--</time></span><i>Shop →</i>';document.body.insertBefore(bar,document.body.firstChild);
+ var bar=document.createElement('a');bar.className='glbar';bar.href=R;bar.innerHTML='<b>'+esc(gl.name)+'</b><span>Gents jacket: gents sweatshirt FREE · Ladies jacket: kids sweatshirt FREE · Free delivery</span><span class="glbar-t">Ends in <time data-gl-left>--</time></span><i>Shop →</i>';document.body.insertBefore(bar,document.body.firstChild);
  all('.nav-deals').forEach(function(a){a.href=R;a.textContent='Grand Launch 🎁'});
  glMark();
  var bt=document.querySelector('.cta [data-buy]'),sku='';try{sku=bt&&JSON.parse(bt.dataset.buy).sku}catch(e){}
- if(sku&&gl.q.indexOf(sku)>-1){var cta=bt.closest('.cta'),n=document.createElement('a');n.className='gl-note';n.href=R;n.innerHTML='<b>🎁 '+esc(gl.name)+': this jacket comes with a FREE kids sweatshirt + free delivery</b><span>Buy any 2 jackets of '+m+'+ and get a men\'s sweatshirt FREE instead. Pick your free gift in the bag · ends in <time data-gl-left></time></span>';cta.parentNode.insertBefore(n,cta)}
- var sl=$('slider');if(sl&&!document.querySelector('.glp')){var h=document.createElement('a');h.className='glhome';h.href=R;h.innerHTML='<span class="glhome-k">'+esc(gl.name)+' · until '+esc(gl.endTxt)+'</span><b>Buy a jacket. Get a sweatshirt <em>FREE</em>.</b><span class="glhome-t"><span>1 jacket '+m+'+ → kids sweatshirt free</span><span>2 jackets → men\'s sweatshirt free</span><span>Free delivery</span></span><i>See the offer →</i>';sl.parentNode.insertBefore(h,sl)}
+ if(sku&&gl.q.indexOf(sku)>-1){var cta=bt.closest('.cta'),n=document.createElement('a');n.className='gl-note';n.href=R;n.innerHTML='<b>🎁 '+esc(gl.name)+': this jacket comes with a FREE '+((gl.qw||[]).indexOf(sku)>-1?'kids':'gents')+' sweatshirt + free delivery</b><span>Pick your free gift in the bag · one gift per order · ends in <time data-gl-left></time></span>';cta.parentNode.insertBefore(n,cta)}
+ var sl=$('slider');if(sl&&!document.querySelector('.glp')){var h=document.createElement('a');h.className='glhome';h.href=R;h.innerHTML='<span class="glhome-k">'+esc(gl.name)+' · until '+esc(gl.endTxt)+'</span><b>Buy a jacket. Get a sweatshirt <em>FREE</em>.</b><span class="glhome-t"><span>Gents jacket '+m+'+ → gents sweatshirt free</span><span>Ladies jacket → kids sweatshirt free</span><span>Free delivery</span></span><i>See the offer →</i>';sl.parentNode.insertBefore(h,sl)}
  function tk(){var left=Math.max(0,Math.floor((gl.end-Date.now())/1000)),d=Math.floor(left/86400),h=Math.floor(left%86400/3600),mi=Math.floor(left%3600/60),se=left%60;
   all('[data-gl-left]').forEach(function(e){e.textContent=(d?d+'d ':'')+p2(h)+':'+p2(mi)+':'+p2(se)});
   all('[data-gl-clock]').forEach(function(e){var u={d:d,h:p2(h),m:p2(mi),s:p2(se)};[].forEach.call(e.querySelectorAll('[data-u]'),function(b){b.textContent=u[b.dataset.u]})});

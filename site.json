@@ -41,17 +41,7 @@
     "start": "2026-11-11T00:00:00+05:00",
     "end": "2026-11-13T23:59:59+05:00"
   },
-  "launch": {
-    "name": "Website Grand Launch",
-    "start": "2026-11-23T00:00:00+05:00",
-    "end": "2026-11-29T23:59:59+05:00",
-    "min": 1999,
-    "kidsMax": 499,
-    "menPrice": [
-      599,
-      699
-    ]
-  },
+  "launch": {"name": "Website Grand Launch", "start": "2026-11-23T00:00:00+05:00", "end": "2026-11-29T23:59:59+05:00", "min": 1999, "kidsMax": 399, "menPrice": [599, 599], "womenMin": 1199},
   "bundle": [
     {
       "min": 2,
