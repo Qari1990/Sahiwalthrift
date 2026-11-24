@@ -1,7 +1,7 @@
 """Website Grand Launch gift offer (site.json "launch").
 
-Buy 1 jacket of Rs 1,999+ (men / unisex): a kids sweatshirt is added to the bag FREE, plus free delivery.
-Buy 2 or more such jackets: a men's sweatshirt (Rs 599-699 piece) is added FREE instead, plus free delivery.
+Gents (men / unisex) jacket of Rs 1,999+: a gents sweatshirt (Rs 599 piece) FREE, plus free delivery.
+Ladies jacket (Rs 1,199+): a kids sweatshirt (Rs 399 piece) FREE, plus free delivery. One free gift per order (WAQAR 24 Nov).
 Gifts are real one-off pieces from the live stock; site.js shows the eligible gifts in the bag and the customer taps "Add free" (never auto-added, WAQAR 23 Nov);
 sold or reserved pieces are skipped. The offer switches itself on at "start" and off at "end" (Pakistan time) in the browser.
 
@@ -40,13 +40,18 @@ def is_jacket(it):
             and it["gender"] in ("Men", "Unisex") and adult(it) and it["price"] >= L.get("min", 1999))
 
 
+def is_ladies_jacket(it):
+    return (JACKET.search(it["category"]) and not NOT_JACKET.search(f"{it['category']} {it.get('name', '')}")
+            and it["gender"] == "Women" and adult(it) and it["price"] >= L.get("womenMin", 1199))
+
+
 def is_kids_gift(it):
     return ("sweat" in it["category"].lower() and (it["gender"] == "Kids" or (it["gender"] == "Unisex" and not adult(it)))
-            and 0 < it["price"] <= L.get("kidsMax", 499))
+            and 0 < it["price"] <= L.get("kidsMax", 399))
 
 
 def is_men_gift(it):
-    lo, hi = L.get("menPrice", [599, 699])
+    lo, hi = L.get("menPrice", [599, 599])
     return "sweat" in it["category"].lower() and it["gender"] in ("Men", "Unisex") and adult(it) and lo <= it["price"] <= hi
 
 
@@ -55,7 +60,7 @@ def _bag(it): return {"sku": it["sku"], "b": it["brand"], "n": it["name"], "p": 
 
 def pools(items):
     live = [i for i in items if not i.get("sold")]
-    return ([i for i in live if is_jacket(i)], sorted((i for i in live if is_kids_gift(i)), key=lambda i: (i["brand"] == CFG.get("houseLabel"), -i["price"], i["sku"])),
+    return ([i for i in live if is_jacket(i)] + [i for i in live if is_ladies_jacket(i)], sorted((i for i in live if is_kids_gift(i)), key=lambda i: (i["brand"] == CFG.get("houseLabel"), -i["price"], i["sku"])),
             sorted((i for i in live if is_men_gift(i)), key=lambda i: (i["brand"] == CFG.get("houseLabel"), -i["price"], i["sku"])))
 
 
@@ -65,7 +70,7 @@ def cfg(items):
     q, kids, men = pools(items)
     return {"name": L.get("name", "Grand Launch"), "start": _ms(L["start"]), "end": _ms(L["end"]), "min": L.get("min", 1999),
             "endTxt": datetime.fromisoformat(L["end"]).strftime("%-d %b, %-I:%M %p"),
-            "q": [i["sku"] for i in q], "kids": [_bag(i) for i in kids], "men": [_bag(i) for i in men]}
+            "q": [i["sku"] for i in q], "qw": [i["sku"] for i in q if i["gender"] == "Women"], "wmin": L.get("womenMin", 1199), "kids": [_bag(i) for i in kids], "men": [_bag(i) for i in men]}
 
 
 def js_prefix(items):
@@ -117,35 +122,36 @@ def build_page(out):
     end = datetime.fromisoformat(L["end"]); start = datetime.fromisoformat(L["start"])
     dates = f"{start.strftime('%-d')}–{end.strftime('%-d %b')}" if start.month == end.month else f"{start.strftime('%-d %b')}–{end.strftime('%-d %b')}"
     title = f"{name}: buy a jacket, get a sweatshirt free | {CFG['storeName']}"
-    desc = (f"{name} at {CFG['storeName']}: buy 1 men's jacket of {rs(L.get('min', 1999))}+ and get a kids sweatshirt free, buy 2 and get a men's sweatshirt free. "
+    mn = L.get("menPrice", [599, 599]); wmin = rs(L.get("womenMin", 1199)); kmax = rs(L.get("kidsMax", 399))
+    desc = (f"{name} at {CFG['storeName']}: buy a gents jacket of {rs(L.get('min', 1999))}+ and get a gents sweatshirt free, buy a ladies jacket and get a kids sweatshirt free. "
             f"Free delivery, cash on delivery all over Pakistan. Until {end.strftime('%-d %b')}.")
     head = re.sub(r"<title>.*?</title>", f"<title>{esc(title)}</title>", head, 1, re.S)
     head = re.sub(r'(<meta (?:name|property)="(?:description|og:description|twitter:description)" content=")[^"]*', lambda m: m.group(1) + esc(desc), head)
     head = re.sub(r'(<meta (?:property|name)="(?:og:title|twitter:title|og:image:alt)" content=")[^"]*', lambda m: m.group(1) + esc(title), head)
     head = head.replace("/deals.html\"", "/grand-launch.html\"")
     head = re.sub(r"<script type=\"application/ld\+json\">.*?</script>", "", head, flags=re.S)
-    mn = L.get("menPrice", [599, 699])
     wa = re.sub(r"\D", "", CFG["whatsapp"]); wa = "92" + wa[1:] if wa.startswith("0") else wa
     wa_msg = f"Hi! I want to order with the {name} offer (buy a jacket, get a sweatshirt free). Which jackets are available?"
     clock = '<div class="gl-clock" data-gl-clock aria-label="Time left"><span><b data-u="d">0</b>days</span><span><b data-u="h">00</b>hrs</span><span><b data-u="m">00</b>min</span><span><b data-u="s">00</b>sec</span></div>'
     rules = [f"Valid on website orders from {start.strftime('%-d %b')} to {end.strftime('%-d %b, %-I:%M %p')} (Pakistan time). After that the gifts switch off automatically.",
-             f"Qualifying jackets: men's or unisex jackets, puffers and coats priced {rs(L.get('min', 1999))} or more (marked “Free gift inside”).",
-             "Buy 1 qualifying jacket: one kids sweatshirt free. Buy 2 or more: one men's sweatshirt free instead. One free gift per order.",
-             "After you add a jacket, your bag shows the free gifts you can pick. Tap “Add free” on the one you want (with 2 jackets you can pick a men's or a kids sweatshirt).",
+             f"Gents jackets: men's or unisex jackets, puffers and coats priced {rs(L.get('min', 1999))} or more. Free gift: one gents sweatshirt ({rs(mn[0])} piece).",
+             f"Ladies jackets: women's jackets, puffers and coats priced {wmin} or more. Free gift: one kids sweatshirt ({kmax} piece).",
+             "Qualifying jackets are marked “Free gift inside”. One free gift per order, while stock lasts.",
+             "After you add a jacket, your bag shows the free gifts you can pick. Tap “Add free” on the one you want (with a gents jacket you can also pick a kids sweatshirt).",
              "Delivery is free on every order with a qualifying jacket. Cash on delivery all over Pakistan.",
              "Gifts are real one-off pieces from our stock. If the gift you want sells out, pick another one; if none are left, you still get free delivery.",
              "The free gift replaces the bundle discount and the welcome voucher on that order (it is worth more).",
              "Returns: 7 days as usual. If you return the jacket, please return the free gift with it."]
     body = f"""<section class="glh"><div class="glh-in"><p class="glh-k"><span>{esc(CFG['storeName'])}.store</span> {esc(name)} · {esc(dates)}</p>
 <h1>Buy a jacket.<br><em>Get a sweatshirt FREE.</em></h1>
-<div class="glh-tiers"><div class="glt"><b>Buy 1</b><span>men's jacket {esc(rs(L.get('min', 1999)))}+</span><i>→</i><strong>Kids sweatshirt FREE</strong><small>+ free delivery</small></div>
-<div class="glt hot"><b>Buy 2</b><span>men's jackets {esc(rs(L.get('min', 1999)))}+</span><i>→</i><strong>Men's sweatshirt FREE</strong><small>({esc(rs(mn[0]))}–{esc(rs(mn[1]))} piece) + free delivery</small></div></div>
+<div class="glh-tiers"><div class="glt hot"><b>Gents</b><span>jacket {esc(rs(L.get('min', 1999)))}+</span><i>→</i><strong>Gents sweatshirt FREE</strong><small>({esc(rs(mn[0]))} piece) + free delivery</small></div>
+<div class="glt"><b>Ladies</b><span>jacket {esc(wmin)}+</span><i>→</i><strong>Kids sweatshirt FREE</strong><small>({esc(kmax)} piece) + free delivery</small></div></div>
 {clock}<div class="cta"><a class="btn hot" href="#gl-jackets">Shop the jackets</a><a class="btn ghost" href="https://wa.me/{wa}?text={esc(urllib.parse.quote(wa_msg))}" target="_blank" rel="noopener">Order on WhatsApp</a></div>
 <p class="gl-ended">This offer has ended. Thank you for celebrating our launch with us! <a href="deals.html">See current offers</a></p></div></section>
-<section class="glsteps"><ol><li><b>Add a jacket</b><span>Any piece marked “Free gift inside”, {esc(rs(L.get('min', 1999)))} or more.</span></li><li><b>Pick your free gift</b><span>Your bag shows the free sweatshirts you can choose. Tap “Add free”.</span></li><li><b>Pay on delivery</b><span>Free delivery, cash on delivery, 7-day returns.</span></li></ol></section>
+<section class="glsteps"><ol><li><b>Add a jacket</b><span>Any gents or ladies jacket marked “Free gift inside”.</span></li><li><b>Pick your free gift</b><span>Your bag shows the free sweatshirts you can choose. Tap “Add free”.</span></li><li><b>Pay on delivery</b><span>Free delivery, cash on delivery, 7-day returns.</span></li></ol></section>
 <section class="shop coll" id="gl-jackets"><h2>Jackets that unlock a free gift <span class="muted">{len(q)} pieces, one of each</span></h2><div class="grid">{_cards(q)}</div></section>
-<section class="shop coll gl-gifts" id="gl-gifts"><h2>Free gift with 1 jacket: kids sweatshirts <span class="muted">{len(kids)} in stock</span></h2><div class="grid">{_cards(kids, True)}</div>
-<h2>Free gift with 2 jackets: men's sweatshirts <span class="muted">{len(men)} in stock</span></h2><div class="grid">{_cards(men, True)}</div></section>
+<section class="shop coll gl-gifts" id="gl-gifts"><h2>Free with a gents jacket: gents sweatshirts <span class="muted">{len(men)} in stock</span></h2><div class="grid">{_cards(men, True)}</div>
+<h2>Free with a ladies jacket: kids sweatshirts <span class="muted">{len(kids)} in stock</span></h2><div class="grid">{_cards(kids, True)}</div></section>
 <section class="dealsp"><div class="drules"><h2>How the {esc(name)} offer works</h2><ol>{''.join(f'<li>{esc(r)}</li>' for r in rules)}</ol></div></section>"""
     page.write_text(head.replace("<main>", '<main class="glp">') + body + tail)
     sm = out / "sitemap.xml"
